@@ -1,0 +1,64 @@
+{
+  "seed": 1,
+  "chunk_frames": 120,
+  "bitrates_mbps": [
+    7.5,
+    9.35,
+    9.35,
+    12
+  ],
+  "sources": [
+    {
+      "folder": "../sources/inter4k",
+      "max_files": 800,
+      "chunks": 1,
+      "min_fps": 50
+    },
+    {
+      "file": "../sources/uvg_readysetgo_2160p60.mkv",
+      "chunks": 1
+    },
+    {
+      "file": "../sources/downloads/nfl_highlights.mp4",
+      "chunks": 40,
+      "exclude_seconds": [
+        [
+          55,
+          85
+        ],
+        [
+          195,
+          225
+        ],
+        [
+          715,
+          745
+        ]
+      ]
+    },
+    {
+      "file": "../sources/xiph_touchdown_pass_1080p30.mkv",
+      "chunks": 1
+    },
+    {
+      "folder": "../sources/extra",
+      "chunk_every": 10,
+      "min_height": 1080
+    }
+  ],
+  "test_only": [
+    "xiph_rush_field_cuts",
+    "uvg_jockey",
+    "the excluded NFL seconds"
+  ],
+  "patch": 128,
+  "patches_per_frame": 2,
+  "frame_step": 6,
+  "train": {
+    "epochs": 30,
+    "batch": 32,
+    "lr": 0.0003
+  },
+  "frames": 3,
+  "format": "1080i"
+}

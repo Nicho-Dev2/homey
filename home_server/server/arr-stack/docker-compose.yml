@@ -1,0 +1,86 @@
+# Radarr + Sonarr + Prowlarr, with qBittorrent locked inside a Surfshark VPN.
+#
+# Only qBittorrent's traffic goes through Surfshark. If the VPN drops, gluetun's
+# firewall blocks qBittorrent from the internet entirely (built-in kill switch).
+# The rest of the Mac — Jellyfin, Tailscale, the HDHomeRun — is unaffected.
+#
+# Settings come from .env (copy .env.example).
+
+services:
+  gluetun:
+    image: qmcgaw/gluetun:latest
+    container_name: gluetun
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    environment:
+      - VPN_SERVICE_PROVIDER=surfshark
+      - VPN_TYPE=wireguard
+      - WIREGUARD_PRIVATE_KEY=${SURFSHARK_WG_PRIVATE_KEY}
+      - WIREGUARD_ADDRESSES=${SURFSHARK_WG_ADDRESS}
+      - SERVER_COUNTRIES=${VPN_COUNTRY}
+      - TZ=${TZ}
+    ports:
+      - 8080:8080           # qBittorrent web UI (lives inside the VPN)
+    volumes:
+      - ./config/gluetun:/gluetun
+    restart: unless-stopped
+
+  qbittorrent:
+    image: lscr.io/linuxserver/qbittorrent:latest
+    container_name: qbittorrent
+    network_mode: service:gluetun   # all traffic goes through the VPN, or nowhere
+    depends_on:
+      gluetun:
+        condition: service_healthy
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+      - WEBUI_PORT=8080
+    volumes:
+      - ./config/qbittorrent:/config
+      - ${MEDIA_DIR}:/data
+    restart: unless-stopped
+
+  prowlarr:
+    image: lscr.io/linuxserver/prowlarr:latest
+    container_name: prowlarr
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+    ports:
+      - 9696:9696
+    volumes:
+      - ./config/prowlarr:/config
+    restart: unless-stopped
+
+  radarr:
+    image: lscr.io/linuxserver/radarr:latest
+    container_name: radarr
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+    ports:
+      - 7878:7878
+    volumes:
+      - ./config/radarr:/config
+      - ${MEDIA_DIR}:/data
+    restart: unless-stopped
+
+  sonarr:
+    image: lscr.io/linuxserver/sonarr:latest
+    container_name: sonarr
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+    ports:
+      - 8989:8989
+    volumes:
+      - ./config/sonarr:/config
+      - ${MEDIA_DIR}:/data
+    restart: unless-stopped

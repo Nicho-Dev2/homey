@@ -1,0 +1,10 @@
+label,vmaf,ssim,psnr,gap_closed,offset,frames
+"floor: broadcast, plain scaling",54.156744,0.826861,29.895522,,0,292
+"ceiling: 720p, no compression",99.982511,0.98737,41.33143,,0,292
+cleanup_look1_coreml,59.999432,0.842213,30.235469,+13%,0,292
+cleanup_look_large_b_coreml,60.143562,0.843671,30.280102,+13%,0,292
+i_cleanup_field_look1,70.893676,0.89075,32.405356,+37%,0,292
+i_cleanup_frame_look1,67.241173,0.886028,32.058508,+29%,0,292
+i_live_1080p,70.60336,0.888619,32.194635,+36%,0,292
+i_live,73.758897,0.891224,32.11848,+43%,0,292
+i_live_large,73.720357,0.890974,32.0928,+43%,0,292

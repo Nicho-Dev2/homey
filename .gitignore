@@ -1,0 +1,51 @@
+# What stays out of git, and why. Comments must be on their own lines in this file.
+
+# --- Secrets and machine-specific settings: never commit ---
+# Surfshark WireGuard key and other settings (copy .env.example to .env)
+.env
+# Jellyfin API key (copy server.conf.example to server.conf)
+server.conf
+# Radarr/Sonarr/Prowlarr/qBittorrent/gluetun settings, API keys and databases
+home_server/server/arr-stack/config/
+# Learned on this Mac at run time (channel formats of the local stations)
+home_server/channel_formats.json
+*.pid
+*.log
+
+# --- Video, recordings and training data ---
+# Large, and mostly copies of TV broadcasts or downloaded footage that must not be published.
+*.ts
+*.mp4
+*.mkv
+*.mov
+*.m4v
+*.webm
+*.avi
+*.y4m
+*.yuv
+*.mxf
+*.7z
+*.zip
+*.npy
+*.png
+*.jpg
+home_server/bench/sources/
+home_server/bench/cleanup/data*/
+# VGG-19 weights (~80 MB), downloaded automatically by train_look.py
+home_server/bench/cleanup/judge/
+# Re-made by export_coreml.py; the copies the server runs are in enhance/models/
+home_server/bench/cleanup/runs/*/*.mlpackage/
+
+# --- Python environments and caches ---
+.venv/
+.venv-*/
+__pycache__/
+*.pyc
+
+# --- Temporary files ---
+# Copies made before code changes, replaced by git history
+home_server/bench/backups/
+.DS_Store
+*.tmp
+*.part
+*.done

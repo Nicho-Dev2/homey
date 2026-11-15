@@ -1,0 +1,85 @@
+{
+ "name": "v3",
+ "arch": "t",
+ "model": {
+  "frames": 3,
+  "channels": 32,
+  "mid": 64,
+  "mid_blocks": 4
+ },
+ "epochs": 30,
+ "batch": 32,
+ "lr": 0.0003,
+ "seed": 1,
+ "patches": 90880,
+ "data": "data_v3",
+ "data_config": {
+  "seed": 1,
+  "chunk_frames": 240,
+  "bitrates_mbps": [
+   3.5,
+   4.9,
+   4.9,
+   6.5
+  ],
+  "sources": [
+   {
+    "file": "../sources/downloads/nfl_highlights.mp4",
+    "chunks": 60,
+    "exclude_seconds": [
+     [
+      55,
+      85
+     ],
+     [
+      195,
+      225
+     ],
+     [
+      715,
+      745
+     ]
+    ]
+   },
+   {
+    "file": "../sources/xiph_touchdown_pass_1080p30.mkv",
+    "chunks": 2
+   },
+   {
+    "file": "../sources/uvg_readysetgo_2160p60.mkv",
+    "chunks": 1
+   },
+   {
+    "folder": "../sources/inter4k",
+    "max_files": 800,
+    "chunks": 1,
+    "chunk_frames": 120,
+    "frame_step": 6,
+    "patches_per_frame": 4,
+    "min_fps": 50
+   },
+   {
+    "folder": "../sources/extra",
+    "chunk_every": 8,
+    "min_height": 1080
+   }
+  ],
+  "test_only": [
+   "nfl_a/b/c (the excluded seconds above)",
+   "xiph_rush_field_cuts",
+   "uvg_jockey",
+   "anything in sources/extra_test (not read by training)"
+  ],
+  "patch": 128,
+  "patches_per_frame": 6,
+  "frame_step": 3,
+  "train": {
+   "epochs": 30,
+   "batch": 32,
+   "lr": 0.0003
+  },
+  "frames": 3
+ },
+ "torch": "2.15.0",
+ "device": "mps"
+}

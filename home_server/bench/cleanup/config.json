@@ -1,0 +1,17 @@
+{
+  "seed": 1,
+  "chunk_frames": 240,
+  "bitrates_mbps": [3.5, 4.9, 4.9, 6.5],
+  "sources": [
+    {"file": "../sources/downloads/nfl_highlights.mp4", "chunks": 60,
+     "exclude_seconds": [[55, 85], [195, 225], [715, 745]]},
+    {"file": "../sources/xiph_touchdown_pass_1080p30.mkv", "chunks": 2},
+    {"file": "../sources/uvg_readysetgo_2160p60.mkv", "chunks": 1}
+  ],
+  "test_only": ["nfl_a/b/c (the excluded seconds above)", "xiph_rush_field_cuts", "uvg_jockey"],
+  "patch": 128,
+  "patches_per_frame": 6,
+  "frame_step": 3,
+  "model": {"channels": 32, "blocks": 4},
+  "train": {"epochs": 30, "batch": 32, "lr": 0.0002}
+}

@@ -1,0 +1,11 @@
+{
+ "input": "x",
+ "shape": [
+  1,
+  18,
+  360,
+  640
+ ],
+ "frames": 3,
+ "max_difference_of_255": 0.213
+}

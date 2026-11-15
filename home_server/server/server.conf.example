@@ -1,0 +1,17 @@
+# Copy to server.conf and fill in.
+
+# Jellyfin → Dashboard → API Keys → + (name it "server toggle")
+JELLYFIN_API_KEY=""
+JELLYFIN_URL="http://127.0.0.1:8096"
+JELLYFIN_APP="Jellyfin"
+
+# Warn before turning off if a recording starts within this many minutes
+WARN_MINUTES=120
+
+# Folder holding docker-compose.yml for Radarr/Sonarr
+ARR_DIR="$HOME/homey/home_server/server/arr-stack"
+
+# "Docker" for Docker Desktop, "OrbStack" if you use OrbStack
+DOCKER_APP="Docker"
+
+UPSCALER_LABEL="com.home.ota-upscaler"

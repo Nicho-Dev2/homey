@@ -1,0 +1,33 @@
+{
+ "pick": "large",
+ "way": "neural engine",
+ "ms": 7.37,
+ "budget": 9.0,
+ "frames": 3,
+ "results": {
+  "v1 (one frame)": {
+   "pytorch": 8.94,
+   "all": 3.23,
+   "gpu": 6.79,
+   "neural engine": 2.93
+  },
+  "v2 small": {
+   "pytorch": 10.2,
+   "all": 3.95,
+   "gpu": 8.83,
+   "neural engine": 3.94
+  },
+  "v2 medium": {
+   "pytorch": 14.13,
+   "all": 4.93,
+   "gpu": 11.04,
+   "neural engine": 4.85
+  },
+  "v2 large": {
+   "pytorch": 30.09,
+   "all": 7.41,
+   "gpu": 24.54,
+   "neural engine": 7.37
+  }
+ }
+}

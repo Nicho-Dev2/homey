@@ -1,0 +1,25 @@
+{
+ "name": "look_large_b",
+ "kind": "look",
+ "from": "v3_large_b",
+ "arch": "t",
+ "model": {
+  "frames": 3,
+  "channels": 48,
+  "mid": 96,
+  "mid_blocks": 5
+ },
+ "epochs": 3,
+ "batch": 24,
+ "lr": 0.0001,
+ "weights": {
+  "pixel": 1.0,
+  "texture": 1.0,
+  "gan": 0.1
+ },
+ "seed": 1,
+ "patches": 90880,
+ "data": "data_v3",
+ "torch": "2.15.0",
+ "device": "mps"
+}

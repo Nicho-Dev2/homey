@@ -1,0 +1,5 @@
+label,vmaf,ssim,psnr,gap_closed,offset,frames
+"floor: broadcast, plain scaling",69.779431,0.910237,32.230726,,0,592
+"ceiling: 720p, no compression",99.714963,0.994427,41.39607,,0,592
+cleanup_look1_coreml,75.073715,0.931589,33.062752,+18%,0,592
+cleanup_look_large_b_coreml,75.082702,0.932143,33.096762,+18%,0,592
