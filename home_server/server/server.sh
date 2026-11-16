@@ -17,6 +17,7 @@ source "$CONF"
 : "${JELLYFIN_URL:=http://127.0.0.1:8096}"
 : "${JELLYFIN_API_KEY:=}"
 : "${JELLYFIN_APP:=Jellyfin}"
+: "${HDHR_RELAY:=yes}"
 : "${HDHR_HOST:=hdhomerun.local}"
 : "${PYTHON:=/opt/homebrew/bin/python3}"
 : "${MEDIA_DRIVE:=}"
@@ -51,12 +52,19 @@ start_docker() {
 # permission of whatever ran this script: Shortcuts, Terminal or SSH. macOS keeps
 # that permission reliably; for a background Python started by launchd it does not.
 
+# With HDHR_RELAY=yes the upscaler reaches the HDHomeRun through hdhr_relay.py
+# (a system service on 127.0.0.1, see SETUP.md), because macOS does not reliably let
+# a background Python talk to devices on the home network.
+relay_running() { nc -z 127.0.0.1 8091 >/dev/null 2>&1; }
+
 upscaler_running() { pgrep -f "[o]ta_upscaler.py" >/dev/null; }
 
 # Runs the upscaler and starts it again if it ever stops on its own. "off" stops this loop first.
 upscaler_loop() {
+  local tuner=(--hdhr "$HDHR_HOST")
+  [ "$HDHR_RELAY" = "yes" ] && tuner=(--hdhr 127.0.0.1:8091 --stream-host 127.0.0.1:8092)
   while true; do
-    "$PYTHON" "$UPSCALER" --hdhr "$HDHR_HOST" --max-streams 2 >>"$UPSCALER_LOG" 2>&1
+    "$PYTHON" "$UPSCALER" "${tuner[@]}" --max-streams 2 >>"$UPSCALER_LOG" 2>&1
     local code=$?
     echo "$(date '+%Y-%m-%d %H:%M:%S') upscaler stopped (exit code $code); starting it again in 10 s" >>"$UPSCALER_LOG"
     sleep 10
@@ -77,8 +85,14 @@ stop_upscaler() {
     rm -f "$UPSCALER_PID"
   fi
   pkill -TERM -f "[o]ta_upscaler.py"            # lets it stop its AI workers cleanly
-  for _ in $(seq 1 10); do upscaler_running || return 0; sleep 1; done
+  for _ in $(seq 1 10); do upscaler_running || break; sleep 1; done
   pkill -KILL -f "[o]ta_upscaler.py"
+  # Nothing of the upscaler may outlive "off": its AI workers and their ffmpeg
+  # helpers (which read from pipes; Jellyfin's own ffmpeg does not) go too.
+  pkill -KILL -f "enhance/[w]orker.py"
+  pkill -KILL -f "enhance/[c]leanup_stage.py"
+  pkill -KILL -f "[f]fmpeg .*pipe:[0-9]"
+  return 0
 }
 
 # ---- Media drive ---------------------------------------------------------- #
@@ -179,6 +193,9 @@ cmd_on() {
   if [ -f "$OLD_AGENT" ]; then
     problems+=("old upscaler LaunchAgent still installed (see SETUP.md step 3)")
   fi
+  if [ "$HDHR_RELAY" = "yes" ] && ! relay_running; then
+    problems+=("HDHomeRun relay not running (see SETUP.md step 3)")
+  fi
   start_upscaler || problems+=("upscaler (see $UPSCALER_LOG)")
 
   open -a "$JELLYFIN_APP" || problems+=("Jellyfin")
@@ -229,6 +246,10 @@ cmd_status() {
   echo "Jellyfin:     $s"
   upscaler_running && s="running" || s="stopped"
   echo "Upscaler:     $s"
+  if [ "$HDHR_RELAY" = "yes" ]; then
+    relay_running && s="running" || s="NOT running"
+    echo "Tuner relay:  $s"
+  fi
   if ! arr_ready; then
     echo "Docker stack: not set up"
   elif docker_ready; then

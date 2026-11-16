@@ -21,4 +21,9 @@ MEDIA_DRIVE=""
 
 # Upscaler: the HDHomeRun's name (or reserved IP) and the Python that runs it
 HDHR_HOST="hdhomerun.local"
+
+# "yes": reach the HDHomeRun through the relay service (SETUP.md step 3). The relay
+# has the HDHomeRun's name built in when it is installed; HDHR_HOST is then unused.
+# "no": connect straight to HDHR_HOST (only works where macOS allows it).
+HDHR_RELAY="yes"
 PYTHON="/opt/homebrew/bin/python3"

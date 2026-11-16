@@ -42,6 +42,12 @@ CHUNK = 188 * 1024          # multiple of the 188-byte MPEG-TS packet size
 LINEUP_TTL = 300            # seconds to cache the HDHomeRun channel list
 TUNER_TIMEOUT = 10          # seconds to wait for the HDHomeRun to start a stream
 
+# A stream that goes wrong must never take the Mac down with it (one stuck video process
+# once grew to 65 GB and froze the machine). Every stream is checked every GUARD_EVERY seconds:
+GUARD_EVERY = 10            # seconds between checks
+STALL_SECONDS = 30          # stop a stream that produced no video, or whose viewer took none, for this long
+MEMORY_LIMIT_MB = 6000      # stop a stream whose video processes use more than this (normal: under 3000)
+
 log = logging.getLogger("ota-upscaler")
 
 
@@ -53,6 +59,9 @@ def parse_args(argv=None):
     p = argparse.ArgumentParser(description="Deinterlace/upscale HDHomeRun channels for Jellyfin.")
     p.add_argument("--hdhr", required=True,
                    help="HDHomeRun IP address or hostname, e.g. 192.168.1.50")
+    p.add_argument("--stream-host", default=None,
+                   help="Open channel streams at this host:port instead of the address the HDHomeRun "
+                        "gives in its channel list. Used with server/hdhr_relay.py, e.g. 127.0.0.1:8092")
     p.add_argument("--bind", default="0.0.0.0", help="Address to listen on (default all)")
     p.add_argument("--port", type=int, default=8090, help="Port to listen on (default 8090)")
     p.add_argument("--public-host", default=None,
@@ -103,8 +112,9 @@ def parse_args(argv=None):
 class Lineup:
     """Caches the HDHomeRun's lineup.json."""
 
-    def __init__(self, hdhr):
+    def __init__(self, hdhr, stream_host=None):
         self.url = f"http://{hdhr}/lineup.json"
+        self.stream_host = stream_host
         self._channels = {}
         self._order = []
         self._fetched = 0.0
@@ -117,6 +127,8 @@ class Lineup:
         for ch in data:
             if ch.get("DRM") or not ch.get("URL"):
                 continue  # encrypted ATSC 3.0 channels can't be played
+            if self.stream_host:
+                ch["URL"] = urlparse(ch["URL"])._replace(netloc=self.stream_host).geturl()
             num = str(ch["GuideNumber"])
             channels[num] = ch
             order.append(num)
@@ -479,6 +491,20 @@ class Enhancer:
             stop_process(waiting)
 
 
+def memory_mb(proc):
+    """Memory used by a stream's video process, and its helpers if it has any, in MB. 0 if unknown."""
+    try:
+        listing = subprocess.run(["ps", "-axo", "pid=,pgid=,rss="], capture_output=True, text=True, timeout=5).stdout
+    except (OSError, subprocess.SubprocessError):
+        return 0
+    total_kb = 0
+    for line in listing.splitlines():
+        pid, group, kb = (int(x) for x in line.split())
+        if pid == proc.pid or (getattr(proc, "has_helpers", False) and group == proc.pid):
+            total_kb += kb
+    return total_kb / 1024
+
+
 def stop_process(proc):
     """Stop a stream's video process. An enhancer worker runs helper programs, so its whole group goes."""
     try:
@@ -646,6 +672,7 @@ class Tune:
         self.upstream = self.proc = None
         self.enhanced = False               # is this stream using the AI enhancer's one slot?
         self.stop = threading.Event()
+        self.last_video = time.monotonic()  # when the video process last produced something
 
     def start_video(self):
         """Open the tuner and start a video process. If a processing method quits before its first
@@ -667,14 +694,39 @@ class Tune:
 
     def read(self):
         """The next piece of the stream; empty once the tuner or the video process has stopped."""
-        return b"" if self.stop.is_set() else self.proc.stdout.read(CHUNK)
+        proc = self.proc
+        if self.stop.is_set() or proc is None:
+            return b""
+        data = proc.stdout.read(CHUNK)
+        self.last_video = time.monotonic()
+        return data
+
+    def guard(self):
+        """Runs beside the stream and stops its video process if it stalls or its memory balloons.
+        The stream then ends the normal way: read() returns nothing and the viewer is disconnected
+        (Jellyfin simply asks for the channel again)."""
+        while not self.stop.wait(GUARD_EVERY):
+            proc = self.proc
+            if proc is None:
+                return
+            idle, used = time.monotonic() - self.last_video, memory_mb(proc)
+            if idle > STALL_SECONDS:
+                reason = f"no video came out for {idle:.0f} seconds"
+            elif used > MEMORY_LIMIT_MB:
+                reason = f"its video processes grew to {used / 1024:.1f} GB of memory"
+            else:
+                continue
+            log.warning("Stopping %s for %s: %s", self.number, self.client, reason)
+            self.stop.set()
+            stop_process(proc)
+            return
 
     def close(self):
         """Stop the video process, give back the enhancer slot if this stream had it, free the tuner."""
         self.stop.set()
-        if self.proc:
-            stop_process(self.proc)
-            self.proc = None
+        proc, self.proc = self.proc, None
+        if proc:
+            stop_process(proc)
         if self.enhanced:
             self.app.enhancer.release()
             self.enhanced = False
@@ -748,6 +800,7 @@ class Tune:
 
 class Handler(BaseHTTPRequestHandler):
     server_version = "ota-upscaler/1.0"
+    timeout = STALL_SECONDS        # a viewer that takes no data for this long is disconnected
     protocol_version = "HTTP/1.0"  # stream until we close; no chunked encoding
 
     def log_message(self, fmt, *args):
@@ -848,6 +901,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(503, "text/plain", b"All tuners busy\n")
 
         tune = Tune(self.app, number, ch, sid, client)
+        self.app.tunes.add(tune)
         try:
             started = time.monotonic()
             data, error = tune.start_video()
@@ -855,6 +909,8 @@ class Handler(BaseHTTPRequestHandler):
                 code, message = error
                 return self._send(code, "text/plain", message)
             log.info("First video for %s after %.1fs", number, time.monotonic() - started)
+            tune.last_video = time.monotonic()
+            threading.Thread(target=tune.guard, daemon=True).start()
             self.send_response(200)
             self.send_header("Content-Type", "video/mp2t")
             self.send_header("Cache-Control", "no-cache")
@@ -866,6 +922,7 @@ class Handler(BaseHTTPRequestHandler):
             pass  # client changed channel or stopped watching
         finally:
             tune.close()
+            self.app.tunes.discard(tune)
             self.app.sessions.release(sid)
             log.info("Stopped %s for %s", number, client)
 
@@ -873,12 +930,13 @@ class Handler(BaseHTTPRequestHandler):
 class App:
     def __init__(self, cfg):
         self.cfg = cfg
-        self.lineup = Lineup(cfg.hdhr)
+        self.lineup = Lineup(cfg.hdhr, cfg.stream_host)
         self.sessions = Sessions(cfg.max_streams)
         self.guide = None if cfg.no_guide else Guide(cfg.hdhr, cfg.guide_api, self.lineup)
         self.formats = Formats(pathlib.Path(__file__).with_name("channel_formats.json"))
         self.enhancer = Enhancer(cfg)
         self.failed_pipelines = set()
+        self.tunes = set()                 # the streams being watched right now
 
 
 def main(argv=None):
@@ -911,6 +969,8 @@ def main(argv=None):
         pass
     finally:
         server.server_close()
+        for tune in list(app.tunes):       # stop every stream's video process before leaving
+            tune.close()
         app.enhancer.stop()
 
 

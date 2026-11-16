@@ -98,6 +98,26 @@ launchctl bootout gui/$(id -u)/com.home.ota-upscaler
 rm ~/Library/LaunchAgents/com.home.ota-upscaler.plist
 ```
 
+**Install the HDHomeRun relay (once, asks for your Mac password).** macOS does not
+reliably let a background Python talk to devices on the home network ("No route to
+host"), but system services running as root are exempt. The relay is a tiny system
+service that passes connections from this Mac through to the HDHomeRun; the upscaler
+talks to it on `127.0.0.1`. Use your HDHomeRun's name or reserved IP in the second line:
+
+```
+sudo install -d /usr/local/libexec
+sudo install -o root -g wheel -m 755 hdhr_relay.py /usr/local/libexec/hdhr_relay.py
+sed "s|__HDHR_HOST__|hdhomerun.local|" com.home.hdhr-relay.plist | sudo tee /Library/LaunchDaemons/com.home.hdhr-relay.plist >/dev/null
+sudo launchctl bootstrap system /Library/LaunchDaemons/com.home.hdhr-relay.plist
+curl -s http://127.0.0.1:8091/lineup.json | head -c 200
+```
+
+The last line should print the start of your channel list. The relay starts by itself
+at every boot; its log is `/var/log/hdhr-relay.log`. After changing `hdhr_relay.py`,
+run the second line again and then `sudo launchctl kickstart -k system/com.home.hdhr-relay`.
+To remove it: `sudo launchctl bootout system/com.home.hdhr-relay`, then delete the two
+installed files. (`HDHR_RELAY="no"` in `server.conf` makes the upscaler connect directly.)
+
 Paste a Jellyfin API key (Jellyfin → Dashboard → API Keys → **+**). This lets
 "off" warn you about people watching and recordings starting soon.
 
@@ -129,9 +149,7 @@ on the charger, and keeps the media drive from spinning down.
 within 2 hours, it asks first. Then it stops everything and lets the Mac sleep.
 Downloads pause and resume the next time you turn the server on.
 
-After a restart, click **Server On** once. The first time, macOS asks whether
-Shortcuts may find devices on your local network: click **Allow** (the upscaler
-needs it to reach the HDHomeRun). The upscaler's log is
+After a restart, click **Server On** once. The upscaler's log is
 `~/Library/Logs/ota-upscaler.log` (`tail -f` it to watch); if the upscaler ever
 stops on its own, it is started again after 10 seconds.
 

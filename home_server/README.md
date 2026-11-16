@@ -118,15 +118,16 @@ Press Ctrl+C to stop.
 ## 4. Run it with the server toggle
 
 `server/server.sh on` starts the upscaler (and Jellyfin), `server/server.sh off` stops it;
-see `server/SETUP.md` for the one-click Shortcuts. Set `HDHR_HOST` in `server/server.conf`.
+see `server/SETUP.md` for the one-click Shortcuts. It reaches the HDHomeRun through a small relay service (`server/hdhr_relay.py`,
+installed once: `server/SETUP.md` step 3).
 
 - Logs: `~/Library/Logs/ota-upscaler.log`
 - It is started again if it ever stops on its own.
 
-It is not a launchd LaunchAgent on purpose: macOS does not reliably keep the Local
-Network permission for a Python started by launchd, so the upscaler could not reach
-the HDHomeRun ("No route to host"). Started from Shortcuts or Terminal, it uses their
-permission.
+Why the relay: macOS does not reliably give a background Python the Local Network
+permission, so the upscaler could not reach the HDHomeRun ("No route to host"),
+whether it was started by launchd, Shortcuts, Terminal or SSH. System services
+running as root are exempt, so only the relay talks to the HDHomeRun.
 
 
 ## 5. Add it to Jellyfin
