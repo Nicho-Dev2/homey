@@ -115,19 +115,18 @@ python3 ~/homey/home_server/ota_upscaler.py --hdhr 192.168.1.50
 
 Press Ctrl+C to stop.
 
-## 4. Start it automatically at login
+## 4. Run it with the server toggle
 
-```
-cd ~/homey/home_server
-sed -e "s|__HOME__|$HOME|g" -e "s|__HDHR_IP__|192.168.1.50|" \
-    com.home.ota-upscaler.plist > ~/Library/LaunchAgents/com.home.ota-upscaler.plist
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.home.ota-upscaler.plist
-```
+`server/server.sh on` starts the upscaler (and Jellyfin), `server/server.sh off` stops it;
+see `server/SETUP.md` for the one-click Shortcuts. Set `HDHR_HOST` in `server/server.conf`.
 
-- Stop: `launchctl bootout gui/$(id -u)/com.home.ota-upscaler`
 - Logs: `~/Library/Logs/ota-upscaler.log`
+- It is started again if it ever stops on its own.
 
-It restarts itself if it ever crashes.
+It is not a launchd LaunchAgent on purpose: macOS does not reliably keep the Local
+Network permission for a Python started by launchd, so the upscaler could not reach
+the HDHomeRun ("No route to host"). Started from Shortcuts or Terminal, it uses their
+permission.
 
 
 ## 5. Add it to Jellyfin

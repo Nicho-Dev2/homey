@@ -14,4 +14,11 @@ ARR_DIR="$HOME/homey/home_server/server/arr-stack"
 # "Docker" for Docker Desktop, "OrbStack" if you use OrbStack
 DOCKER_APP="Docker"
 
-UPSCALER_LABEL="com.home.ota-upscaler"
+# External drive holding the media, e.g. "/Volumes/MyDrive". "on" refuses to start
+# if it isn't connected, and keeps it from spinning down while the server is on.
+# Leave empty if the media is on the internal disk.
+MEDIA_DRIVE=""
+
+# Upscaler: the HDHomeRun's name (or reserved IP) and the Python that runs it
+HDHR_HOST="hdhomerun.local"
+PYTHON="/opt/homebrew/bin/python3"

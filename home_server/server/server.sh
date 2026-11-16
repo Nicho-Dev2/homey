@@ -17,24 +17,96 @@ source "$CONF"
 : "${JELLYFIN_URL:=http://127.0.0.1:8096}"
 : "${JELLYFIN_API_KEY:=}"
 : "${JELLYFIN_APP:=Jellyfin}"
-: "${UPSCALER_LABEL:=com.home.ota-upscaler}"
+: "${HDHR_HOST:=hdhomerun.local}"
+: "${PYTHON:=/opt/homebrew/bin/python3}"
+: "${MEDIA_DRIVE:=}"
 : "${ARR_DIR:=$HOME/homey/home_server/server/arr-stack}"
 : "${DOCKER_APP:=Docker}"
 : "${WARN_MINUTES:=120}"
 
-UID_NUM="$(id -u)"
-UPSCALER_PLIST="$HOME/Library/LaunchAgents/$UPSCALER_LABEL.plist"
+SELF="$DIR/server.sh"
+UPSCALER="$(dirname "$DIR")/ota_upscaler.py"
+UPSCALER_LOG="$HOME/Library/Logs/ota-upscaler.log"
+UPSCALER_PID="$DIR/.upscaler.pid"     # the restart loop below, not Python itself
+OLD_AGENT="$HOME/Library/LaunchAgents/com.home.ota-upscaler.plist"
 AWAKE_PID="$DIR/.caffeinate.pid"
+DRIVE_PID="$DIR/.drive-awake.pid"
 
 notify() { osascript -e "display notification \"$1\" with title \"Home server\"" >/dev/null 2>&1; echo "$1"; }
 
 docker_ready() { docker info >/dev/null 2>&1; }
+
+# The Radarr/Sonarr stack counts as set up once its .env exists (SETUP.md step 2).
+arr_ready() { [ -f "$ARR_DIR/.env" ]; }
 
 start_docker() {
   docker_ready && return 0
   open -a "$DOCKER_APP" || return 1
   for _ in $(seq 1 60); do docker_ready && return 0; sleep 2; done
   return 1
+}
+
+# ---- Upscaler ------------------------------------------------------------- #
+# server.sh starts the upscaler itself (not launchd), so it gets the Local Network
+# permission of whatever ran this script: Shortcuts, Terminal or SSH. macOS keeps
+# that permission reliably; for a background Python started by launchd it does not.
+
+upscaler_running() { pgrep -f "[o]ta_upscaler.py" >/dev/null; }
+
+# Runs the upscaler and starts it again if it ever stops on its own. "off" stops this loop first.
+upscaler_loop() {
+  while true; do
+    "$PYTHON" "$UPSCALER" --hdhr "$HDHR_HOST" --max-streams 2 >>"$UPSCALER_LOG" 2>&1
+    local code=$?
+    echo "$(date '+%Y-%m-%d %H:%M:%S') upscaler stopped (exit code $code); starting it again in 10 s" >>"$UPSCALER_LOG"
+    sleep 10
+  done
+}
+
+start_upscaler() {
+  upscaler_running && return 0
+  nohup "$SELF" _upscaler_loop >/dev/null 2>&1 &
+  echo $! > "$UPSCALER_PID"
+  sleep 3
+  upscaler_running
+}
+
+stop_upscaler() {
+  if [ -f "$UPSCALER_PID" ]; then
+    kill "$(cat "$UPSCALER_PID")" 2>/dev/null
+    rm -f "$UPSCALER_PID"
+  fi
+  pkill -TERM -f "[o]ta_upscaler.py"            # lets it stop its AI workers cleanly
+  for _ in $(seq 1 10); do upscaler_running || return 0; sleep 1; done
+  pkill -KILL -f "[o]ta_upscaler.py"
+}
+
+# ---- Media drive ---------------------------------------------------------- #
+# MEDIA_DRIVE (server.conf) is the external drive holding the Jellyfin libraries,
+# e.g. /Volumes/Insignia1TB. Empty = media on the internal disk, no drive checks.
+
+drive_mounted() { mount | grep -qF " on $MEDIA_DRIVE "; }
+
+# Touches a tiny file every 2 minutes so the drive never spins down while the
+# server is on (a spinning drive waking up can draw too much power over USB and drop out).
+drive_awake_loop() {
+  while true; do
+    touch "$MEDIA_DRIVE/.keep-awake" 2>/dev/null
+    sleep 120
+  done
+}
+
+start_drive_awake() {
+  [ -f "$DRIVE_PID" ] && kill -0 "$(cat "$DRIVE_PID")" 2>/dev/null && return 0
+  nohup "$SELF" _drive_awake >/dev/null 2>&1 &
+  echo $! > "$DRIVE_PID"
+}
+
+stop_drive_awake() {
+  if [ -f "$DRIVE_PID" ]; then
+    kill "$(cat "$DRIVE_PID")" 2>/dev/null
+    rm -f "$DRIVE_PID"
+  fi
 }
 
 # ---- Jellyfin checks ------------------------------------------------------ #
@@ -88,7 +160,15 @@ PY
 cmd_on() {
   local problems=()
 
-  if [ -f "$ARR_DIR/docker-compose.yml" ]; then
+  if [ -n "$MEDIA_DRIVE" ]; then
+    if ! drive_mounted; then
+      notify "Media drive not connected ($MEDIA_DRIVE): server not started"
+      return 1
+    fi
+    start_drive_awake
+  fi
+
+  if arr_ready; then
     if start_docker; then
       (cd "$ARR_DIR" && docker compose up -d >/dev/null 2>&1) || problems+=("Radarr/Sonarr stack")
     else
@@ -96,10 +176,10 @@ cmd_on() {
     fi
   fi
 
-  if [ -f "$UPSCALER_PLIST" ]; then
-    launchctl print "gui/$UID_NUM/$UPSCALER_LABEL" >/dev/null 2>&1 \
-      || launchctl bootstrap "gui/$UID_NUM" "$UPSCALER_PLIST" || problems+=("upscaler")
+  if [ -f "$OLD_AGENT" ]; then
+    problems+=("old upscaler LaunchAgent still installed (see SETUP.md step 3)")
   fi
+  start_upscaler || problems+=("upscaler (see $UPSCALER_LOG)")
 
   open -a "$JELLYFIN_APP" || problems+=("Jellyfin")
 
@@ -129,11 +209,12 @@ cmd_off() {
     fi
   fi
 
-  if [ -f "$ARR_DIR/docker-compose.yml" ] && docker_ready; then
+  if arr_ready && docker_ready; then
     (cd "$ARR_DIR" && docker compose stop >/dev/null 2>&1)
   fi
-  launchctl bootout "gui/$UID_NUM/$UPSCALER_LABEL" >/dev/null 2>&1
+  stop_upscaler
   osascript -e "quit app \"$JELLYFIN_APP\"" >/dev/null 2>&1
+  stop_drive_awake
 
   if [ -f "$AWAKE_PID" ]; then
     kill "$(cat "$AWAKE_PID")" 2>/dev/null
@@ -146,9 +227,11 @@ cmd_status() {
   local s
   if pgrep -x "$JELLYFIN_APP" >/dev/null || pgrep -f "jellyfin" >/dev/null; then s="running"; else s="stopped"; fi
   echo "Jellyfin:     $s"
-  launchctl print "gui/$UID_NUM/$UPSCALER_LABEL" >/dev/null 2>&1 && s="running" || s="stopped"
+  upscaler_running && s="running" || s="stopped"
   echo "Upscaler:     $s"
-  if docker_ready && [ -f "$ARR_DIR/docker-compose.yml" ]; then
+  if ! arr_ready; then
+    echo "Docker stack: not set up"
+  elif docker_ready; then
     echo "Docker stack:"
     (cd "$ARR_DIR" && docker compose ps --format '  {{.Service}}: {{.State}}')
   else
@@ -156,6 +239,11 @@ cmd_status() {
   fi
   { [ -f "$AWAKE_PID" ] && kill -0 "$(cat "$AWAKE_PID")" 2>/dev/null; } && s="yes" || s="no"
   echo "Kept awake:   $s"
+  if [ -n "$MEDIA_DRIVE" ]; then
+    drive_mounted && s="connected" || s="NOT connected"
+    { [ -f "$DRIVE_PID" ] && kill -0 "$(cat "$DRIVE_PID")" 2>/dev/null; } && s="$s, kept spinning" || s="$s, may spin down"
+    echo "Media drive:  $s"
+  fi
   local report; report="$(in_use_report)"
   [ -n "$report" ] && { echo "In use:"; echo "$report" | sed 's/^/  /'; }
   return 0
@@ -165,5 +253,7 @@ case "${1:-}" in
   on)     cmd_on ;;
   off)    cmd_off "${2:-}" ;;
   status) cmd_status ;;
+  _upscaler_loop) upscaler_loop ;;     # used by "on"; not for typing by hand
+  _drive_awake)   drive_awake_loop ;;  # used by "on"; not for typing by hand
   *)      echo "Usage: $0 on | off [--force] | status"; exit 1 ;;
 esac

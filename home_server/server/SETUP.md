@@ -90,6 +90,14 @@ cp server.conf.example server.conf
 open -e server.conf
 ```
 
+If you installed the upscaler as a LaunchAgent before, remove it: `server.sh` now
+starts the upscaler itself.
+
+```
+launchctl bootout gui/$(id -u)/com.home.ota-upscaler
+rm ~/Library/LaunchAgents/com.home.ota-upscaler.plist
+```
+
 Paste a Jellyfin API key (Jellyfin → Dashboard → API Keys → **+**). This lets
 "off" warn you about people watching and recordings starting soon.
 
@@ -112,14 +120,20 @@ In the **Shortcuts** app:
    **Server Off**.
 4. For each one: open the shortcut's details (ⓘ) → **Pin in Menu Bar**.
 
-**What "on" does:** starts Docker and the Radarr/Sonarr stack, the upscaler and
-Jellyfin, and keeps the Mac awake while it's on the charger.
+**What "on" does:** checks that the media drive (`MEDIA_DRIVE` in `server.conf`)
+is connected, and stops with a notification if it isn't. Then it starts Docker and
+the Radarr/Sonarr stack, the upscaler and Jellyfin, keeps the Mac awake while it's
+on the charger, and keeps the media drive from spinning down.
 
 **What "off" does:** if someone is watching, or a recording is running or starts
 within 2 hours, it asks first. Then it stops everything and lets the Mac sleep.
 Downloads pause and resume the next time you turn the server on.
 
-After a restart, click **Server On** once.
+After a restart, click **Server On** once. The first time, macOS asks whether
+Shortcuts may find devices on your local network: click **Allow** (the upscaler
+needs it to reach the HDHomeRun). The upscaler's log is
+`~/Library/Logs/ota-upscaler.log` (`tail -f` it to watch); if the upscaler ever
+stops on its own, it is started again after 10 seconds.
 
 ## 4. Phone access with Tailscale
 

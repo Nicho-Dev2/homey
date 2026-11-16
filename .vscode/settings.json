@@ -1,0 +1,48 @@
+{
+    // Keep VS Code and its Python extension away from the big folders:
+    // video, training data, model copies and the Python environments.
+    // Without this, VS Code watches and indexes gigabytes of files and its
+    // memory use can keep growing while the server runs.
+
+    "files.watcherExclude": {
+        "**/.venv*/**": true,
+        "**/__pycache__/**": true,
+        "home_server/bench/sources/**": true,
+        "home_server/bench/backups/**": true,
+        "home_server/bench/cleanup/data*/**": true,
+        "home_server/bench/cleanup/judge/**": true,
+        "home_server/bench/cleanup/runs/**": true,
+        "home_server/bench/quality/**": true,
+        "**/*.ts": true,
+        "**/*.mp4": true,
+        "**/*.mkv": true,
+        "**/*.npy": true,
+        "**/*.mlpackage/**": true
+    },
+
+    "search.exclude": {
+        "**/.venv*": true,
+        "home_server/bench/sources": true,
+        "home_server/bench/backups": true,
+        "home_server/bench/cleanup/data*": true,
+        "home_server/bench/cleanup/judge": true,
+        "home_server/bench/cleanup/runs": true,
+        "home_server/bench/quality": true,
+        "**/*.mlpackage": true
+    },
+
+    // Python extension (Pylance): only analyse our own code, not the
+    // installed packages (PyTorch alone is huge).
+    "python.analysis.exclude": [
+        "**/.venv*",
+        "**/__pycache__",
+        "home_server/bench/sources",
+        "home_server/bench/backups",
+        "home_server/bench/cleanup/data*",
+        "home_server/bench/cleanup/judge",
+        "home_server/bench/cleanup/runs",
+        "home_server/bench/quality"
+    ],
+    "python.analysis.indexing": false,
+    "python.analysis.diagnosticMode": "openFilesOnly"
+}
