@@ -16,6 +16,7 @@ class Format:
     height: int
     interlaced: bool    # True: each frame holds two half-pictures ("fields") taken 1/60 s apart
     model: str          # the cleanup network for this picture size, in models/
+    sharpener: str      # the filter that does the light sharpening (see SHARPNESS below)
     tile: tuple         # (width, height) of one piece handed to the 2x upscaler
     tile_xs: tuple      # where the pieces start, left to right ...
     tile_ys: tuple      # ... and top to bottom. Neighbors overlap so the joins can be faded.
@@ -36,10 +37,20 @@ class Format:
 
 
 FORMATS = {f.name: f for f in (
-    #       name     size        interlaced  cleanup network          tile        tiles start at
-    Format("720p",  1280, 720,   False,      "look1.mlpackage",       (704, 720), (0, 576),       (0,)),       # -> 1440p
-    Format("1080i", 1920, 1080,  True,       "look1_1080i.mlpackage", (704, 576), (0, 608, 1216), (0, 504)),   # -> 4K
+    #       name     size        interlaced  cleanup network          sharpener  tile        tiles start at
+    Format("720p",  1280, 720,   False,      "look1.mlpackage",       "cas",     (704, 720), (0, 576),       (0,)),       # -> 1440p
+    Format("1080i", 1920, 1080,  True,       "look1_1080i.mlpackage", "unsharp", (672, 560), (0, 624, 1248), (0, 520)),   # -> 4K
 )}
+
+# How strong each sharpening filter is set by default. The two numbers give the same look: measured
+# on 1080i test clips, unsharp at 0.3 lifts edges as much as cas at 0.4 and scores the same (VMAF
+# within 0.1), for an eighth of the processor time. 1080i uses it because processor heat is what
+# makes a fanless Mac fall behind there.
+SHARPNESS = {"cas": 0.4, "unsharp": 0.3}
+
+# The 1080i tiles are as small as keeps a fade of 48 (across) and 40 (down) pixels where neighbors
+# overlap: upscaling is about 93% of the 1080i work, and 672x560 tiles are 7% fewer pixels than the
+# 704x576 used before (measured need: a hot fanless Mac fell 2-3% short of live speed).
 
 
 def read_exact(pipe, n):

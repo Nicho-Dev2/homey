@@ -33,7 +33,7 @@ import threading
 import time
 from pathlib import Path
 import numpy as np
-from common import BITRATE, FORMATS, OUT_FPS, FAKE, read_exact, say
+from common import BITRATE, FORMATS, OUT_FPS, FAKE, SHARPNESS, read_exact, say
 from upscale import Upscaler2x, quiet_apple_logs
 
 HERE = Path(__file__).resolve().parent
@@ -46,7 +46,10 @@ def parse_args():
     p.add_argument("--format", choices=list(FORMATS), default="720p", help="what the broadcast is (default 720p)")
     p.add_argument("--model", help="cleanup network (default: the one in models/ for this format)")
     p.add_argument("--bitrate", default=BITRATE, help=f"output video bitrate (default {BITRATE}; see common.py before raising it)")
-    p.add_argument("--sharpness", type=float, default=0.4, help="0 = no sharpening (default 0.4)")
+    p.add_argument("--sharpen-with", choices=list(SHARPNESS),
+                   help="1080i only, for comparing: the sharpening filter (default: the format's own, see common.py)")
+    p.add_argument("--sharpness", type=float,
+                   help="0 = no sharpening (default: the filter's own strength; the filters use different scales)")
     p.add_argument("--upscale", choices=("on", "off"), default="on",
                    help="off: skip the 2x AI upscale and send the cleaned pictures at their own size")
     p.add_argument("--ffmpeg", default="ffmpeg")
@@ -122,12 +125,17 @@ def main():
     cfg = parse_args()
     fmt = FORMATS[cfg.format]
     cfg.model = cfg.model or str(HERE / "models" / fmt.model)
+    if cfg.sharpen_with and not fmt.interlaced and cfg.sharpen_with != fmt.sharpener:
+        sys.exit(f"--sharpen-with can only be chosen for 1080i; {fmt.name} always uses {fmt.sharpener}.")
+    cfg.sharpen_with = cfg.sharpen_with or fmt.sharpener
+    if cfg.sharpness is None:
+        cfg.sharpness = SHARPNESS[cfg.sharpen_with]
     if not FAKE:
         quiet_apple_logs()
 
     # 1. Load everything, then say so.
     cleanup = subprocess.Popen([sys.executable, str(HERE / "cleanup_stage.py"), cfg.model, cfg.ffmpeg, fmt.name,
-                                str(cfg.sharpness)],
+                                str(cfg.sharpness), cfg.sharpen_with],
                                stdin=subprocess.PIPE, stdout=subprocess.PIPE)
     upscaler = Upscaler2x(fmt) if cfg.upscale == "on" else None
     out_w, out_h = (upscaler.out_w, upscaler.out_h) if upscaler else (fmt.width, fmt.height)
@@ -167,7 +175,7 @@ def main():
     y_size, n = fmt.width * fmt.height, 0
     spent = {"waiting for cleanup": 0.0, "upscaling": 0.0, "waiting for the encoder": 0.0}
     began = mark = checked = time.monotonic()
-    n_checked = 0
+    n_checked, spent_checked = 0, dict(spent)      # the counts at the last per-minute check
 
     def clock(what):
         nonlocal mark
@@ -190,9 +198,12 @@ def main():
             n += 1
             if mark - checked >= CHECK_EVERY:      # a live broadcast arrives at 59.94; less means falling behind
                 rate = (n - n_checked) / (mark - checked)
-                if rate < 59:
-                    say(f"enhancer: only {rate:.1f} pictures a second over the last minute; live TV needs 59.9")
-                checked, n_checked = mark, n
+                if rate < 59:                      # say so, and where that minute's time went
+                    shares = ", ".join(f"{what} {100 * (spent[what] - spent_checked[what]) / (mark - checked):.0f}%"
+                                       for what in spent)
+                    say(f"enhancer: only {rate:.1f} pictures a second over the last minute; live TV needs 59.9 "
+                        f"(time: {shares})")
+                checked, n_checked, spent_checked = mark, n, dict(spent)
     except (BrokenPipeError, OSError):
         pass                                       # the viewer stopped watching
     finally:

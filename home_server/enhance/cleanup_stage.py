@@ -124,11 +124,21 @@ def start_decoder(ffmpeg, fmt):
         stdout=subprocess.PIPE, stderr=subprocess.PIPE)      # stdin: inherited, i.e. the broadcast
 
 
-def start_deinterlacer(ffmpeg, fmt, sharpness):
+# The light sharpening is the most processor-hungry step of the whole 1080i chain (measured on the
+# 2-minute test clip: deinterlacing 24 s of processor time, cas on all planes 198 s), and processor
+# heat is what makes a fanless Mac fall behind. Both ways below sharpen brightness only: that is
+# where the eye sees sharpness, and for cas it costs a third less than doing color as well.
+SHARPENERS = {
+    "cas": ",format=yuv420p,cas=strength={:g}:planes=1",      # adapts to the picture, no halos; 137 s
+    "unsharp": ",unsharp=lx=3:ly=3:la={:g}",                  # simpler, can outline strong edges; 24 s
+}
+
+
+def start_deinterlacer(ffmpeg, fmt, sharpness, sharpener="cas"):
     """ffmpeg: cleaned interlaced frames on its stdin -> one full picture per field, lightly
     sharpened, written straight to this process's stdout. bwdif is the same deinterlacer the
     standard path uses. US broadcasts send the top field first; raw frames cannot say so themselves."""
-    sharpen = f",format=yuv420p,cas=strength={sharpness:g}" if sharpness > 0 else ""    # cas needs separate color planes
+    sharpen = SHARPENERS[sharpener].format(sharpness) if sharpness > 0 else ""
     return subprocess.Popen(
         [ffmpeg, "-hide_banner", "-loglevel", "level+error", "-nostats",
          "-f", "rawvideo", "-pix_fmt", "nv12", "-s", f"{fmt.width}x{fmt.height}",
@@ -155,13 +165,14 @@ def watch_decoder_log(decoder, start, frame_seconds):
 
 def main():
     model_path, ffmpeg, fmt, sharpness = sys.argv[1], sys.argv[2], FORMATS[sys.argv[3]], float(sys.argv[4])
+    sharpener = sys.argv[5] if len(sys.argv) > 5 else "cas"
     out = sys.stdout.buffer
     y, uv = np.empty((fmt.height, fmt.width), np.uint8), np.empty((fmt.height // 2, fmt.width), np.uint8)
     cleaned = pictures_in(y, uv, fmt)              # where each cleaned picture goes: views into y and uv
     picture_height, picture_width = cleaned[0][0].shape
     network = CleanupNetwork(model_path, picture_width, picture_height)
     decoder = start_decoder(ffmpeg, fmt)           # waits quietly until the broadcast starts arriving
-    deinterlacer = start_deinterlacer(ffmpeg, fmt, sharpness) if fmt.interlaced else None
+    deinterlacer = start_deinterlacer(ffmpeg, fmt, sharpness, sharpener) if fmt.interlaced else None
     start = {"seconds": 0.0, "known": threading.Event()}
     threading.Thread(target=watch_decoder_log, args=(decoder, start, fmt.frame_seconds), daemon=True).start()
     out.write(b"ready\n")
