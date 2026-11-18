@@ -117,8 +117,8 @@ To try stronger or weaker sharpening: `--sharpness 0.6` (0 to 1, default 0.4).
 To watch them on the TV:
 
 ```
-mkdir -p ~/Media/movies/"AI test"
-cp clip_720p_original_720p.ts clip_720p_*_4k.mp4 ~/Media/movies/"AI test"/
+mkdir -p /Volumes/MyDrive/Media/movies/"AI test"
+cp clip_720p_original_720p.ts clip_720p_*_4k.mp4 /Volumes/MyDrive/Media/movies/"AI test"/
 ```
 
 Scan the Movies library in Jellyfin (Dashboard → Libraries → Scan) and play each

@@ -23,9 +23,12 @@ Folder layout:
     server/
         server.sh  server.conf  SETUP.md
         arr-stack/  docker-compose.yml  .env
-~/Media/
-    downloads/   movies/   tv/
+/Volumes/MyDrive/Media/        (your media drive; any folder works)
+    downloads/   movies/   tv/   recordings/
 ```
+
+Downloads and the library must be on the same drive, so finished downloads are
+moved instantly (hardlinked) instead of copied.
 
 ---
 
@@ -36,15 +39,18 @@ a MacBook Air). If you use OrbStack, set `DOCKER_APP="OrbStack"` in `server.conf
 
 ## 2. Set up the Radarr/Sonarr stack
 
+Use your own media folder in the first line (here `/Volumes/MyDrive/Media`):
+
 ```
-mkdir -p ~/Media/{downloads,movies,tv}
+mkdir -p /Volumes/MyDrive/Media/{downloads,movies,tv}
 cd ~/homey/home_server/server/arr-stack
 cp .env.example .env
 open -e .env
 ```
 
-Fill in your Surfshark WireGuard key (instructions are inside `.env`) and replace
-`YOUR_USERNAME`. Then:
+Fill in your Surfshark WireGuard key (instructions are inside `.env`) and set
+`MEDIA_DIR` to the same media folder. If the media folder is on an external drive,
+also set `MEDIA_DRIVE` in `server.conf` (step 3). Then:
 
 ```
 docker compose up -d
@@ -79,7 +85,10 @@ Open each in a browser and create a login when it asks.
 - Settings → Media Management → Root folder: `/data/movies` (Radarr) or
   `/data/tv` (Sonarr).
 
-**Jellyfin** — add libraries pointing at `~/Media/movies` and `~/Media/tv`.
+**Jellyfin** — add libraries pointing at the `movies` and `tv` folders inside your
+media folder. Don't add the media folder itself or `downloads`: Jellyfin would show
+every film more than once (the hardlinked copy in `downloads` looks like a second
+film).
 
 ## 3. Set up the on/off toggle
 
@@ -184,8 +193,10 @@ asleep, you can't wake it from the phone.
 
 ---
 
-## Storage note (Phase 1)
+## Storage note
 
-Downloads and your library share the Air's internal drive. In Radarr and Sonarr,
-set Settings → Media Management → **Minimum free space** to about 20 GB so they
-stop before the drive fills.
+Downloads and your library share one drive. In Radarr and Sonarr, set Settings →
+Media Management → **Minimum free space** (shown with "Show Advanced") to about
+50 GB on a 1 TB drive so they stop before the drive fills. Keep the copies in
+`downloads` while a torrent is still sharing: they are the same files as the
+library copies and take no extra space.
