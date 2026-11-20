@@ -1,0 +1,22 @@
+{
+  "name": "oneforarr-web",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "bundle": "esbuild src/main.tsx --bundle --minify --format=esm --target=es2022 --outfile=dist/app.js --legal-comments=none",
+    "build": "npm run typecheck && npm run bundle && cp static/index.html static/icon.svg dist/",
+    "watch": "esbuild src/main.tsx --bundle --format=esm --target=es2022 --outfile=dist/app.js --sourcemap --watch"
+  },
+  "dependencies": {
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "esbuild": "^0.28.0",
+    "typescript": "^6.0.0"
+  }
+}

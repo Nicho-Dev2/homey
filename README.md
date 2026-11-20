@@ -19,7 +19,11 @@ Everything lives in [`home_server/`](home_server/):
 | `home_server/` | The service between the tuner and Jellyfin (Python standard library only) | [`README.md`](home_server/README.md) |
 | `home_server/enhance/` | The AI picture enhancer the service runs for 720p and 1080i channels | [`README.md`](home_server/enhance/README.md) |
 | `home_server/bench/` | The workshop: training, scoring and timing tools. Not needed to run the server | [`BENCH.md`](home_server/bench/BENCH.md) |
-| `home_server/server/` | The on/off script and the Radarr/Sonarr download stack | [`SETUP.md`](home_server/server/SETUP.md) |
+
+Downloading movies and shows is handled by [`oneforarr/`](oneforarr/README.md), our own
+replacement for Radarr, Sonarr and Prowlarr (Go + React). The download stack in
+`home_server/server/arr-stack/` builds and runs it.
+| `home_server/server/` | The on/off script and the download stack (qBittorrent + OneForArr) | [`SETUP.md`](home_server/server/SETUP.md) |
 
 ## Not in this repository
 

@@ -1,0 +1,10 @@
+# The homey root ignores *.ts because those are video files there.
+# In this folder .ts files are TypeScript source, so keep them.
+!*.ts
+
+bin/
+app/frontend/node_modules/
+app/frontend/dist/*
+!app/frontend/dist/.gitkeep
+# Local test data from `make run` (holds passwords)
+config/
