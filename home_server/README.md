@@ -83,7 +83,7 @@ cd ~/homey/home_server/enhance
 | `enhance/cleanup_stage.py` | Step 1: decode + cleanup network (Core ML). Runs as its own process. |
 | `enhance/upscale.py` | Step 2: Apple's 2x AI upscaler (VideoToolbox). |
 | `enhance/models/` | The trained cleanup network (`look1`). |
-| `server/` | On/off script and the Radarr/Sonarr stack. |
+| `server/` | On/off script and the download stack (qBittorrent in a VPN + OneForArr). |
 | `bench/` | The workshop: training, scoring and timing tools. Not needed to run the server. |
 
 ## 1. Install the tools

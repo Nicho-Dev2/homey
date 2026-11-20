@@ -1,4 +1,4 @@
-# Home server: on/off toggle, Radarr/Sonarr, phone access
+# Home server: on/off toggle, downloads (OneForArr), phone access
 
 ## How it fits together
 
@@ -7,7 +7,7 @@
 | Jellyfin | Mac app | No |
 | OTA upscaler | launchd service | No |
 | qBittorrent (does the downloading) | Docker, inside the VPN container | **Yes, always** |
-| Radarr (movies), Sonarr (TV), Prowlarr (indexers) | Docker | No — they only search and send instructions |
+| OneForArr (movies, shows, indexers; replaces Radarr, Sonarr, Prowlarr) | Docker, built from `~/homey/oneforarr` | No — it only searches and sends instructions |
 | Tailscale (phone access) | Mac app | No |
 
 The VPN lives inside a container (gluetun), so only qBittorrent uses it. If
@@ -22,7 +22,8 @@ Folder layout:
     ota_upscaler.py  com.home.ota-upscaler.plist  README.md
     server/
         server.sh  server.conf  SETUP.md
-        arr-stack/  docker-compose.yml  .env
+        arr-stack/  docker-compose.yml  .env  config/
+~/homey/oneforarr/             (OneForArr's source; the stack builds it)
 /Volumes/MyDrive/Media/        (your media drive; any folder works)
     downloads/   movies/   tv/   recordings/
 ```
@@ -37,7 +38,7 @@ moved instantly (hardlinked) instead of copied.
 Install **Docker Desktop** (docker.com) or **OrbStack** (orbstack.dev — lighter on
 a MacBook Air). If you use OrbStack, set `DOCKER_APP="OrbStack"` in `server.conf`.
 
-## 2. Set up the Radarr/Sonarr stack
+## 2. Set up the download stack
 
 Use your own media folder in the first line (here `/Volumes/MyDrive/Media`):
 
@@ -73,17 +74,23 @@ Open each in a browser and create a login when it asks.
 - Settings → Downloads → Default save path: `/data/downloads`
 - Settings → Web UI → change the password.
 
-**Prowlarr** — http://localhost:9696
-- Add your indexers.
-- Settings → Apps → add Radarr (`http://radarr:7878`) and Sonarr
-  (`http://sonarr:8989`), with each app's API key (Settings → General in each).
-  Prowlarr server: `http://prowlarr:9696`.
+**OneForArr** — http://localhost:7979
 
-**Radarr** — http://localhost:7878 and **Sonarr** — http://localhost:8989
-- Settings → Download Clients → **+** → qBittorrent
-  - Host: `gluetun`, Port: `8080`, plus the qBittorrent login.
-- Settings → Media Management → Root folder: `/data/movies` (Radarr) or
-  `/data/tv` (Sonarr).
+OneForArr needs indexer definition files (the same YAML files Prowlarr uses) in
+`config/oneforarr/definitions/`. Copy them once from a Prowlarr install
+(`config/prowlarr/Definitions/`), or from the `definitions` folder of the
+Prowlarr/Indexers repository on GitHub. New files show up on Indexers → Add.
+
+- Create the owner account when it asks.
+- Settings:
+  - qBittorrent address: `http://gluetun:8080`, plus the qBittorrent login. Press **Test**.
+  - TMDB key (free; instructions on the page). Press **Test**.
+  - Folders: `/data/movies`, `/data/tv`, `/data/downloads`. Path mapping: `/data` and `/data`.
+  - Jellyfin (optional): `http://host.docker.internal:8096` and an API key, so new
+    files show up right away. Press **Test**.
+- Indexers → **Add** your sites. Then Movies or Shows → **Add**.
+
+More detail: `~/homey/oneforarr/README.md`.
 
 **Jellyfin** — add libraries pointing at the `movies` and `tv` folders inside your
 media folder. Don't add the media folder itself or `downloads`: Jellyfin would show
@@ -151,7 +158,7 @@ In the **Shortcuts** app:
 
 **What "on" does:** checks that the media drive (`MEDIA_DRIVE` in `server.conf`)
 is connected, and stops with a notification if it isn't. Then it starts Docker and
-the Radarr/Sonarr stack, the upscaler and Jellyfin, keeps the Mac awake while it's
+the download stack, the upscaler and Jellyfin, keeps the Mac awake while it's
 on the charger, and keeps the media drive from spinning down.
 
 **What "off" does:** if someone is watching, or a recording is running or starts
@@ -164,24 +171,54 @@ stops on its own, it is started again after 10 seconds.
 
 ## 4. Phone access with Tailscale
 
-1. Install **Tailscale** on the Mac and on your phone, and sign in to the same
-   account on both.
-2. In the Tailscale admin page, check the Mac's name (for example `macbook-air`).
-3. On your phone, with Tailscale on, open:
-   - Radarr: `http://macbook-air:7878`
-   - Sonarr: `http://macbook-air:8989`
-   - qBittorrent: `http://macbook-air:8080`
-   - Jellyfin: `http://macbook-air:8096`
-4. Use Share → **Add to Home Screen** on each so they open like apps.
+Tailscale puts the Mac and your phone on a private network, so the apps work on
+Wi-Fi or cellular from anywhere. Nothing is exposed to the open internet — don't
+set up port forwarding on your router.
 
-This works on Wi-Fi or cellular, from anywhere. Nothing is exposed to the open
-internet — don't set up port forwarding on your router.
+**On the Mac**
+
+1. Install the **standalone** Tailscale app from tailscale.com/download (not the
+   App Store one; never both on one Mac). Quit the Surfshark Mac app if it runs.
+2. Open it, allow the system extension / VPN configuration when macOS asks, and
+   sign in.
+3. In Tailscale's settings, turn on starting at login, so it's back after a restart.
+
+**In the admin console** (login.tailscale.com → Machines)
+
+4. On the Mac's row, open the **…** menu:
+   - **Edit machine name** → a short name, for example `homeserver`. That's the
+     name you'll type on the phone.
+   - **Disable key expiry.** Otherwise the Mac drops off every 180 days until you
+     sign in on it again.
+5. Under **DNS**, check that **MagicDNS** is on (it is for new accounts), so the
+   name works instead of a 100.x.y.z address.
+
+**On the phone**
+
+6. Install Tailscale from the App Store, sign in with the same account, turn it on.
+7. Turn Wi-Fi off and open (with your machine name):
+   - OneForArr: `http://homeserver:7979`
+   - Jellyfin: `http://homeserver:8096`
+   - qBittorrent: `http://homeserver:8080`
+8. Use Share → **Add to Home Screen** on each so they open like apps.
+
+**Jellyfin over Tailscale.** Jellyfin treats Tailscale addresses as remote. Keep
+Dashboard → Networking → **Allow remote connections** on. To stream at full
+quality from your phone (no remote bitrate limit), add your home network and
+Tailscale's range to **LAN networks**, e.g. `192.168.1.0/24,100.64.0.0/10`
+(no spaces), save, and restart Jellyfin.
+
+If a page doesn't load over Tailscale but does at home, check System Settings →
+Network → Firewall: if it's on, allow incoming connections for Jellyfin and
+OrbStack.
+
+The Fire TV at home doesn't need Tailscale; it reaches Jellyfin on the home network.
 
 ### Turn the server on or off from your phone (optional)
 
 1. On the Mac: System Settings → General → Sharing → turn on **Remote Login**.
 2. On iPhone, in Shortcuts, add **Run Script Over SSH**:
-   - Host: `macbook-air`, User: your Mac username, then your password or an SSH key.
+   - Host: your machine name (e.g. `homeserver`), User: your Mac username, then your password or an SSH key.
    - Script: `~/homey/home_server/server/server.sh on` (or `off`).
 
 From the phone, "off" can't show the warning, so it cancels if anything is in
@@ -195,8 +232,8 @@ asleep, you can't wake it from the phone.
 
 ## Storage note
 
-Downloads and your library share one drive. In Radarr and Sonarr, set Settings →
-Media Management → **Minimum free space** (shown with "Show Advanced") to about
-50 GB on a 1 TB drive so they stop before the drive fills. Keep the copies in
+Downloads and your library share one drive. OneForArr doesn't check free space
+yet, so keep an eye on the drive (Finder, or `df -h` in Terminal); qBittorrent
+pauses a torrent when the drive is full. Keep the copies in
 `downloads` while a torrent is still sharing: they are the same files as the
 library copies and take no extra space.

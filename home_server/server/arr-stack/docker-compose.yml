@@ -1,4 +1,5 @@
-# Radarr + Sonarr + Prowlarr, with qBittorrent locked inside a Surfshark VPN.
+# OneForArr (movies, shows and indexers in one app), with qBittorrent locked
+# inside a Surfshark VPN.
 #
 # Only qBittorrent's traffic goes through Surfshark. If the VPN drops, gluetun's
 # firewall blocks qBittorrent from the internet entirely (built-in kill switch).
@@ -44,43 +45,21 @@ services:
       - ${MEDIA_DIR}:/data
     restart: unless-stopped
 
-  prowlarr:
-    image: lscr.io/linuxserver/prowlarr:latest
-    container_name: prowlarr
-    environment:
-      - PUID=${PUID}
-      - PGID=${PGID}
-      - TZ=${TZ}
+  # Movies, shows and indexers (replaces Radarr, Sonarr and Prowlarr).
+  # Built from ~/homey/oneforarr; rebuild after changes with
+  #   docker compose up -d --build oneforarr
+  # It runs outside the VPN: it only searches and tells qBittorrent what to
+  # download. In its Settings, qBittorrent's address is http://gluetun:8080.
+  oneforarr:
+    build:
+      context: ../../../oneforarr
+      dockerfile: deploy/Dockerfile
+    image: oneforarr:local
+    container_name: oneforarr
+    user: "${PUID}:${PGID}"       # files it creates belong to you
     ports:
-      - 9696:9696
+      - 7979:7979
     volumes:
-      - ./config/prowlarr:/config
-    restart: unless-stopped
-
-  radarr:
-    image: lscr.io/linuxserver/radarr:latest
-    container_name: radarr
-    environment:
-      - PUID=${PUID}
-      - PGID=${PGID}
-      - TZ=${TZ}
-    ports:
-      - 7878:7878
-    volumes:
-      - ./config/radarr:/config
-      - ${MEDIA_DIR}:/data
-    restart: unless-stopped
-
-  sonarr:
-    image: lscr.io/linuxserver/sonarr:latest
-    container_name: sonarr
-    environment:
-      - PUID=${PUID}
-      - PGID=${PGID}
-      - TZ=${TZ}
-    ports:
-      - 8989:8989
-    volumes:
-      - ./config/sonarr:/config
+      - ./config/oneforarr:/config   # its data file, plus definitions/ (indexer .yml files)
       - ${MEDIA_DIR}:/data
     restart: unless-stopped

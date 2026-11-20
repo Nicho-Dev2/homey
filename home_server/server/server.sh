@@ -37,7 +37,7 @@ notify() { osascript -e "display notification \"$1\" with title \"Home server\""
 
 docker_ready() { docker info >/dev/null 2>&1; }
 
-# The Radarr/Sonarr stack counts as set up once its .env exists (SETUP.md step 2).
+# The download stack (qBittorrent + OneForArr) counts as set up once its .env exists (SETUP.md step 2).
 arr_ready() { [ -f "$ARR_DIR/.env" ]; }
 
 start_docker() {
@@ -97,7 +97,7 @@ stop_upscaler() {
 
 # ---- Media drive ---------------------------------------------------------- #
 # MEDIA_DRIVE (server.conf) is the external drive holding the Jellyfin libraries,
-# e.g. /Volumes/Insignia1TB. Empty = media on the internal disk, no drive checks.
+# e.g. /Volumes/MyDrive. Empty = media on the internal disk, no drive checks.
 
 drive_mounted() { mount | grep -qF " on $MEDIA_DRIVE "; }
 
@@ -184,7 +184,7 @@ cmd_on() {
 
   if arr_ready; then
     if start_docker; then
-      (cd "$ARR_DIR" && docker compose up -d >/dev/null 2>&1) || problems+=("Radarr/Sonarr stack")
+      (cd "$ARR_DIR" && docker compose up -d >/dev/null 2>&1) || problems+=("download stack")
     else
       problems+=("Docker didn't start")
     fi
