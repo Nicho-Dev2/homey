@@ -204,6 +204,7 @@ export type Movie = {
   posterPath?: string;
   backdropPath?: string;
   runtime?: number;
+  releaseDate?: string; // "2026-10-01"
   quality: string;
   addedAt: string;
   file?: { path: string; size: number; quality: string; importedAt: string };
@@ -252,6 +253,7 @@ export type DiscoverItem = {
   backdropPath: string;
   rating: number; // 0–10
   votes: number;
+  releaseDate?: string; // "2026-10-01"; a show's first air date
   inApp: boolean; // added already, not downloaded yet
 };
 

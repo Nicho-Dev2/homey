@@ -21,6 +21,9 @@ type Title struct {
 	BackdropPath string  `json:"backdropPath"`
 	Rating       float64 `json:"rating"` // TMDB's average, 0–10
 	Votes        int     `json:"votes"`
+	// ReleaseDate is "2026-10-01": a movie's release date, or a show's
+	// first air date. Empty when TMDB doesn't know it yet.
+	ReleaseDate string `json:"releaseDate,omitempty"`
 }
 
 type tmdbListItem struct {
@@ -68,6 +71,7 @@ func (t *TMDB) List(ctx context.Context, kind, path string, q url.Values) ([]Tit
 		if len(date) >= 4 {
 			it.Year, _ = strconv.Atoi(date[:4])
 		}
+		it.ReleaseDate = date
 		out = append(out, it)
 	}
 	return out, nil

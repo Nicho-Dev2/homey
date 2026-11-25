@@ -118,3 +118,21 @@ func TestRefreshFinishes(t *testing.T) {
 		t.Errorf("refresh error: %s", sh.RefreshError)
 	}
 }
+
+// Removing a show cancels its downloads in qBittorrent first.
+func TestRemoveCancelsDownloads(t *testing.T) {
+	e := newEnv(t, packAnswer)
+	ctx := context.Background()
+	if _, err := e.s.Add(ctx, 77, "1080p", MonitorAll); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.s.SearchAndGrab(ctx, 77, Target{Season: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.s.Remove(ctx, 77, false); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := e.s.Get(77); ok || !slices.Equal(e.qb.deleted, []string{"h-oneforarr-show-77-s01"}) {
+		t.Errorf("still there: %v, deleted %v", ok, e.qb.deleted)
+	}
+}

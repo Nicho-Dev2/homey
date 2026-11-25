@@ -56,6 +56,10 @@ func (s *Service) MatchNewReleases(ctx context.Context, releases []model.Release
 	sent := 0
 	rules := s.Store.Read().Settings.Movies
 	for _, m := range s.Store.Read().Movies {
+		if s.grabFix(ctx, m, rules, releases) {
+			sent++
+			continue
+		}
 		if !s.Wanted(m) {
 			continue
 		}
@@ -75,4 +79,39 @@ func (s *Service) MatchNewReleases(ctx context.Context, releases []model.Release
 		})
 	}
 	return sent
+}
+
+// grabFix sends a fixed release (REPACK or PROPER) of the release the
+// movie's file came from, if one is among releases; it replaces the file.
+// It reports whether it sent one.
+func (s *Service) grabFix(ctx context.Context, m store.Movie, rules store.MovieRules, releases []model.Release) bool {
+	if m.File == nil || m.File.Release == "" || m.Download != nil {
+		return false
+	}
+	var fixes []model.Release
+	for _, r := range releases {
+		if library.FixesRelease(r.Title, m.File.Release) {
+			fixes = append(fixes, r)
+		}
+	}
+	if len(fixes) == 0 {
+		return false
+	}
+	// The usual checks (title, size, seeders), as if there were no file.
+	noFile := m
+	noFile.File = nil
+	ds := Decide(noFile, rules, fixes)
+	if !ds[0].Accepted {
+		return false
+	}
+	fix := ds[0].Release
+	if err := s.Grab(ctx, m.TMDBID, fix); err != nil {
+		log.Printf("movies: sending fixed release %s: %v", fix.Title, err)
+		return false
+	}
+	log.Printf("movies: fixed release for %s: %s", m.Title, fix.Title)
+	_ = s.update(m.TMDBID, func(x *store.Movie) {
+		x.LastSearch = &store.SearchNote{At: s.Now(), Message: "Found a fixed release (REPACK or PROPER) of the file's release: sent " + fix.Title + " to qBittorrent."}
+	})
+	return true
 }

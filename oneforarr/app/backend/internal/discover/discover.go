@@ -69,7 +69,12 @@ type Service struct {
 	cache map[string]cached // by region
 }
 
+// cacheVersion changes when the saved lists gain something new (v2: release
+// dates), so lists saved before are fetched again.
+const cacheVersion = 2
+
 type cached struct {
+	Version  int       `json:"version"`
 	At       time.Time `json:"at"`
 	Rows     []Row     `json:"rows"`
 	Problems []string  `json:"problems,omitempty"`
@@ -116,23 +121,25 @@ func (s *Service) Page(ctx context.Context, refresh bool) (Page, error) {
 	s.mu.Lock()
 	c, ok := s.cache[region]
 	s.mu.Unlock()
-	if !ok || refresh || s.Now().Sub(c.At) > keepFor {
+	if !ok || refresh || c.Version != cacheVersion || s.Now().Sub(c.At) > keepFor {
 		rows, problems, err := s.build(ctx, metadata.NewTMDB(key), region)
 		if err != nil {
 			return Page{}, err
 		}
-		c = cached{At: s.Now(), Rows: rows, Problems: problems}
+		c = cached{Version: cacheVersion, At: s.Now(), Rows: rows, Problems: problems}
 		s.mu.Lock()
 		s.cache[region] = c
 		s.mu.Unlock()
 		s.save()
 	}
-	return Page{Region: region, UpdatedAt: c.At, Rows: filter(c.Rows, d), Problems: c.Problems}, nil
+	return Page{Region: region, UpdatedAt: c.At, Rows: filter(c.Rows, d, s.Now()), Problems: c.Problems}, nil
 }
 
 // filter drops titles already downloaded (a movie with its file, a show
-// with any episode file) and marks the ones added but not downloaded.
-func filter(rows []Row, d store.Data) []PageRow {
+// with any episode file) and movies not released yet, and marks the ones
+// added but not downloaded.
+func filter(rows []Row, d store.Data, now time.Time) []PageRow {
+	today := now.Format("2006-01-02")
 	have, added := map[string]bool{}, map[string]bool{}
 	for _, m := range d.Movies {
 		k := "movie:" + strconv.Itoa(m.TMDBID)
@@ -156,7 +163,8 @@ func filter(rows []Row, d store.Data) []PageRow {
 		pr := PageRow{ID: r.ID, Title: r.Title, LogoPath: r.LogoPath, Items: []Item{}}
 		for _, it := range r.Items {
 			k := it.Kind + ":" + strconv.Itoa(it.TMDBID)
-			if !have[k] {
+			unreleased := it.Kind == "movie" && it.ReleaseDate > today // dates compare as text
+			if !have[k] && !unreleased {
 				pr.Items = append(pr.Items, Item{Title: it, InApp: added[k]})
 			}
 		}

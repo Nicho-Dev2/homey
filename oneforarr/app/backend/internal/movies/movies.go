@@ -6,6 +6,7 @@ package movies
 import (
 	"context"
 	"errors"
+	"log"
 	"os"
 	"path/filepath"
 	"slices"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/Nicho-Dev2/homey/oneforarr/app/backend/internal/core/releasename"
 	"github.com/Nicho-Dev2/homey/oneforarr/app/backend/internal/core/store"
+	"github.com/Nicho-Dev2/homey/oneforarr/app/backend/internal/downloads"
 	"github.com/Nicho-Dev2/homey/oneforarr/app/backend/internal/indexers"
 	"github.com/Nicho-Dev2/homey/oneforarr/app/backend/internal/library"
 	"github.com/Nicho-Dev2/homey/oneforarr/app/backend/internal/metadata"
@@ -56,6 +58,21 @@ func (s *Service) Get(id int) (store.Movie, bool) {
 	return store.Movie{}, false
 }
 
+// fillReleaseDate looks up the release date of a movie added before the app
+// kept it, and saves it. If TMDB can't be reached, the page shows no date
+// and the next visit tries again.
+func (s *Service) fillReleaseDate(ctx context.Context, m store.Movie) store.Movie {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	info, err := s.tmdb().Movie(ctx, m.TMDBID)
+	if err != nil || info.ReleaseDate == "" {
+		return m
+	}
+	m.ReleaseDate = info.ReleaseDate
+	_ = s.update(m.TMDBID, func(x *store.Movie) { x.ReleaseDate = info.ReleaseDate })
+	return m
+}
+
 // update changes one movie in the store.
 func (s *Service) update(id int, change func(m *store.Movie)) error {
 	return s.Store.Update(func(d *store.Data) error {
@@ -88,7 +105,7 @@ func (s *Service) AddFound(ctx context.Context, tmdbID int, quality, path string
 	m := store.Movie{
 		TMDBID: info.TMDBID, IMDBID: info.IMDBID, Title: info.Title, OriginalTitle: info.OriginalTitle,
 		Year: info.Year, Overview: info.Overview, PosterPath: info.PosterPath, BackdropPath: info.BackdropPath,
-		Runtime: info.Runtime, Quality: library.PresetByID(quality).ID, AddedAt: s.Now(),
+		Runtime: info.Runtime, ReleaseDate: info.ReleaseDate, Quality: library.PresetByID(quality).ID, AddedAt: s.Now(),
 	}
 	set := s.Store.Read().Settings
 	switch info, err := os.Stat(path); {
@@ -126,10 +143,18 @@ func (s *Service) Change(id int, quality string) (store.Movie, error) {
 // Remove takes a movie out of the library. With deleteFiles, its folder in
 // the movies folder is deleted too. The torrent in qBittorrent is left
 // alone (it may still be seeding).
-func (s *Service) Remove(id int, deleteFiles bool) error {
+func (s *Service) Remove(ctx context.Context, id int, deleteFiles bool) error {
 	m, ok := s.Get(id)
 	if !ok {
 		return errNotFound
+	}
+	// Its download goes first: once the movie is gone nothing would follow
+	// or import it.
+	if d := m.Download; d != nil {
+		if err := downloads.Remove(ctx, s.Store.Read().Settings, d.Tag); err != nil {
+			return errors.New("Couldn't cancel the movie's download in qBittorrent, so nothing was removed: " + err.Error())
+		}
+		log.Printf("movies: cancelled %s; %s is being removed", d.ReleaseTitle, m.Title)
 	}
 	if deleteFiles {
 		root := s.Store.Read().Settings.Folders.Movies

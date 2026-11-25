@@ -92,7 +92,8 @@ type Movie struct {
 	PosterPath    string    `json:"posterPath,omitempty"`
 	BackdropPath  string    `json:"backdropPath,omitempty"`
 	Runtime       int       `json:"runtime,omitempty"`
-	Quality       string    `json:"quality"` // a quality preset, e.g. "1080p"
+	ReleaseDate   string    `json:"releaseDate,omitempty"` // "2026-10-01", from TMDB
+	Quality       string    `json:"quality"`               // a quality preset, e.g. "1080p"
 	AddedAt       time.Time `json:"addedAt"`
 	// Folder is the movie's folder name in the movies folder when it isn't
 	// the usual "Title (Year)" (found by a scan). Empty means the usual.
@@ -117,6 +118,9 @@ type MediaFile struct {
 	Quality    string    `json:"quality"`              // e.g. "Bluray-1080p"
 	Resolution int       `json:"resolution,omitempty"` // 1080; 0 unknown
 	ImportedAt time.Time `json:"importedAt"`
+	// Release is the name of the release the file came from, when the app
+	// downloaded it (for spotting a REPACK or PROPER of it later).
+	Release string `json:"release,omitempty"`
 }
 
 // Download is a release handed to qBittorrent.

@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"slices"
@@ -16,6 +17,7 @@ import (
 
 	"github.com/Nicho-Dev2/homey/oneforarr/app/backend/internal/core/releasename"
 	"github.com/Nicho-Dev2/homey/oneforarr/app/backend/internal/core/store"
+	"github.com/Nicho-Dev2/homey/oneforarr/app/backend/internal/downloads"
 	"github.com/Nicho-Dev2/homey/oneforarr/app/backend/internal/indexers"
 	"github.com/Nicho-Dev2/homey/oneforarr/app/backend/internal/library"
 	"github.com/Nicho-Dev2/homey/oneforarr/app/backend/internal/metadata"
@@ -316,10 +318,19 @@ func (s *Service) SetMonitored(id, season, episode int, on bool) (store.Show, er
 
 // Remove takes a show out of the library; with deleteFiles, its folder in
 // the TV folder too. Torrents in qBittorrent are left to seed.
-func (s *Service) Remove(id int, deleteFiles bool) error {
+func (s *Service) Remove(ctx context.Context, id int, deleteFiles bool) error {
 	sh, ok := s.Get(id)
 	if !ok {
 		return errNotFound
+	}
+	// Its downloads go first: once the show is gone nothing would follow
+	// or import them, and they'd fill the downloads folder for nothing.
+	set := s.Store.Read().Settings
+	for _, d := range sh.Downloads {
+		if err := downloads.Remove(ctx, set, d.Tag); err != nil {
+			return errors.New("Couldn't cancel the show's downloads in qBittorrent, so nothing was removed: " + err.Error())
+		}
+		log.Printf("shows: cancelled %s; %s is being removed", d.ReleaseTitle, sh.Title)
 	}
 	if deleteFiles {
 		root := s.Store.Read().Settings.Folders.Shows

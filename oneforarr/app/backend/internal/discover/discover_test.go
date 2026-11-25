@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/Nicho-Dev2/homey/oneforarr/app/backend/internal/core/store"
 	"github.com/Nicho-Dev2/homey/oneforarr/app/backend/internal/metadata"
@@ -31,7 +32,8 @@ func TestPage(t *testing.T) {
 				{"id":10,"title":"Have It","release_date":"2020-01-01","poster_path":"/p"},
 				{"id":11,"title":"Added Not Downloaded","release_date":"2021-01-01","poster_path":"/p"},
 				{"id":12,"title":"New Movie","release_date":"2026-11-01","poster_path":"/p"},
-				{"id":13,"title":"No Poster","release_date":"2026-11-01"}]}`))
+				{"id":13,"title":"No Poster","release_date":"2026-11-01"},
+				{"id":14,"title":"Not Out Yet","release_date":"2099-01-01","poster_path":"/p"}]}`))
 		case strings.HasPrefix(r.URL.Path, "/trending/tv"), r.URL.Path == "/discover/tv":
 			w.Write([]byte(`{"results":[
 				{"id":20,"name":"Show I Have","first_air_date":"2019-01-01","poster_path":"/p"},
@@ -73,9 +75,13 @@ func TestPage(t *testing.T) {
 		}
 		got = append(got, label)
 	}
-	// Mixed movie, show, movie…; downloaded and poster-less titles left out.
+	// Mixed movie, show, movie…; downloaded, poster-less and unreleased
+	// titles left out.
 	if strings.Join(got, "|") != "Added Not Downloaded*|New Show|New Movie" {
 		t.Errorf("items: %v", got)
+	}
+	if d := newOnFlix[2].ReleaseDate; d != "2026-11-01" {
+		t.Errorf("release date: %q", d)
 	}
 
 	// The second page comes from the cache.
@@ -83,6 +89,13 @@ func TestPage(t *testing.T) {
 	if _, err := s.Page(context.Background(), false); err != nil || calls.Load() != before {
 		t.Errorf("not cached: %d calls more", calls.Load()-before)
 	}
+	// Lists saved by an older version (no release dates) are fetched again.
+	stale := New(db, "")
+	stale.cache["US"] = cached{At: time.Now()}
+	if _, err := stale.Page(context.Background(), false); err != nil || calls.Load() == before {
+		t.Errorf("old cache kept: %v", err)
+	}
+	before = calls.Load()
 	// After a restart, the saved cache is used too.
 	again, err := New(db, cacheFile).Page(context.Background(), false)
 	if err != nil || calls.Load() != before || len(again.Rows) != len(page.Rows) {

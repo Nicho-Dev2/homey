@@ -51,9 +51,15 @@ type Info struct {
 	Resolution int    `json:"resolution,omitempty"` // 480, 576, 720, 1080, 2160; 0 unknown
 	Source     Source `json:"-"`
 	SourceName string `json:"source"`
-	Codec      string `json:"codec,omitempty"` // x264, x265, AV1...
-	Proper     bool   `json:"proper,omitempty"`
-	ThreeD     bool   `json:"threeD,omitempty"`
+	Codec      string `json:"codec,omitempty"`  // x264, x265, AV1...
+	Proper     bool   `json:"proper,omitempty"` // a PROPER or REPACK: a fixed release
+	// Fix counts fixes: 1 for PROPER or REPACK, 2 for REPACK2, and so on.
+	// Repack: the fix is by the group that made the first release (a
+	// PROPER is by another group).
+	Fix    int    `json:"fix,omitempty"`
+	Repack bool   `json:"repack,omitempty"`
+	Group  string `json:"group,omitempty"` // the release group: "x264-GRP" → "GRP"
+	ThreeD bool   `json:"threeD,omitempty"`
 	// Season and Episode are set for TV names like "Show S01E02".
 	Season  int `json:"season,omitempty"`
 	Episode int `json:"episode,omitempty"`
@@ -77,6 +83,8 @@ var (
 	reEpisode = regexp.MustCompile(`(?i)^s(\d{1,2})(?:e(\d{1,3}))?$`)
 	reRes     = regexp.MustCompile(`(?i)^(480|576|720|1080|2160)[pi]$`)
 	reCodec   = regexp.MustCompile(`(?i)^(x264|x265|h264|h265|hevc|avc|av1|xvid|vc-?1)$`)
+	reFix     = regexp.MustCompile(`^(proper|repack|rerip)(\d?)$`)
+	reTrailer = regexp.MustCompile(`\s*\[[^\]]*\]\s*$`) // "[eztv]", "[rarbg]"
 )
 
 // Words that mark the end of the title and what they mean.
@@ -135,8 +143,15 @@ func Parse(name string) Info {
 			weak = true
 		case sourceWords[low] != SourceUnknown && i > 0:
 			weak = true
-		case low == "proper" || low == "repack":
+		case reFix.MatchString(low):
+			m := reFix.FindStringSubmatch(low)
+			fix := 1
+			if m[2] != "" {
+				fix, _ = strconv.Atoi(m[2])
+			}
+			info.Fix = max(info.Fix, fix)
 			info.Proper = true
+			info.Repack = info.Repack || m[1] != "proper"
 			weak = true
 		case low == "3d":
 			info.ThreeD = true
@@ -163,6 +178,7 @@ func Parse(name string) Info {
 		}
 	}
 	info.Title = strings.Join(tokens[:titleEnd], " ")
+	info.Group = group(name)
 	info.SourceName = info.Source.String()
 	// A Blu-ray without a resolution is usually 1080p; a DVD is SD.
 	if info.Resolution == 0 && info.Source == SourceBluray {
@@ -176,6 +192,31 @@ func Parse(name string) Info {
 
 // tokenize splits on spaces, dots, underscores and brackets, and drops a
 // trailing "-GROUP" from the last word.
+// group reads the release group: the part after the last "-", as in
+// "Show.S01E02.1080p.WEB.h264-GRP" or "… H 264-GRP [eztv]".
+func group(name string) string {
+	name = strings.TrimSpace(name)
+	for _, ext := range []string{".mkv", ".mp4", ".avi", ".m4v", ".torrent"} {
+		name = strings.TrimSuffix(name, ext)
+	}
+	for reTrailer.MatchString(name) {
+		name = reTrailer.ReplaceAllString(name, "")
+	}
+	i := strings.LastIndex(name, "-")
+	if i < 0 {
+		return ""
+	}
+	g := name[i+1:]
+	switch strings.ToLower(g) {
+	case "", "dl", "rip", "ray": // "WEB-DL", "Blu-ray" at the very end
+		return ""
+	}
+	if strings.ContainsAny(g, " ._") {
+		return ""
+	}
+	return g
+}
+
 func tokenize(name string) []string {
 	name = strings.TrimSpace(name)
 	for _, ext := range []string{".mkv", ".mp4", ".avi", ".m4v", ".torrent"} {

@@ -69,6 +69,11 @@ func (s *Service) CheckDownloads(ctx context.Context) error {
 		case t == nil:
 			// Not there yet.
 		case t.Done():
+			if p, bad := library.SyncProblem(set.Folders.ToApp(t.ContentPath)); bad {
+				m.Download.Hash = t.Hash
+				s.reject(ctx, qb, m, fmt.Sprintf("Deleted %s: it's out of sync (%s).", m.Download.ReleaseTitle, p))
+				continue
+			}
 			s.importMovie(m, *t, set)
 		default:
 			_ = s.update(m.TMDBID, func(x *store.Movie) {
@@ -90,15 +95,19 @@ func (s *Service) CheckDownloads(ctx context.Context) error {
 	return nil
 }
 
-// giveUp removes a dead download (no seeders, no progress) from
-// qBittorrent, blocks its release and searches for another one.
+// giveUp gives up on a dead download (no seeders, no progress).
 func (s *Service) giveUp(ctx context.Context, qb *downloads.QBittorrent, m store.Movie, hours int) {
+	s.reject(ctx, qb, m, fmt.Sprintf("Gave up on %s after %d hours without seeders.", m.Download.ReleaseTitle, hours))
+}
+
+// reject removes a movie's download from qBittorrent with its files,
+// blocks its release and searches for another one. note says why.
+func (s *Service) reject(ctx context.Context, qb *downloads.QBittorrent, m store.Movie, note string) {
 	d := *m.Download
 	if err := qb.Delete(ctx, d.Hash); err != nil {
-		log.Printf("movies: removing dead download %s: %v", d.ReleaseTitle, err)
+		log.Printf("movies: removing %s: %v", d.ReleaseTitle, err)
 		return
 	}
-	note := fmt.Sprintf("Gave up on %s after %d hours without seeders.", d.ReleaseTitle, hours)
 	log.Printf("movies: %s (%s); searching again", note, m.Title)
 	_ = s.update(m.TMDBID, func(x *store.Movie) {
 		x.Download = nil
@@ -174,7 +183,11 @@ func (s *Service) place(m store.Movie, t downloads.Torrent, set store.Settings) 
 	if res == 0 {
 		res = releasename.Parse(filepath.Base(src.Path)).Resolution
 	}
-	return &store.MediaFile{Path: dst, Size: src.Size, Quality: quality, Resolution: res, ImportedAt: s.Now()}, nil
+	release := t.Name
+	if m.Download != nil {
+		release = m.Download.ReleaseTitle
+	}
+	return &store.MediaFile{Path: dst, Size: src.Size, Quality: quality, Resolution: res, ImportedAt: s.Now(), Release: release}, nil
 }
 
 // placeOver puts src at dst like library.Place, but replaces a file already

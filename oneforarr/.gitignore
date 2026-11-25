@@ -8,3 +8,6 @@ app/frontend/dist/*
 !app/frontend/dist/.gitkeep
 # Local test data from `make run` (holds passwords)
 config/
+# The homey root ignores video files; these are tiny ffmpeg test patterns
+# for the sync check's tests.
+!app/backend/internal/mediacheck/testdata/*

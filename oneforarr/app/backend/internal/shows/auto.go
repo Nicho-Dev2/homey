@@ -77,13 +77,14 @@ func (s *Service) due(sh store.Show, wanted []store.Episode, every time.Duration
 }
 
 // MatchNewReleases checks the indexers' newest releases against every
-// show's wanted episodes (and fully missing, fully aired seasons, for
-// season packs), and sends the best release for each. It returns how many
+// show's wanted episodes (and season packs, where one is worth it; see
+// packWorthIt), and sends the best release for each. It returns how many
 // were sent.
 func (s *Service) MatchNewReleases(ctx context.Context, releases []model.Release) int {
 	sent := 0
 	rules := s.Store.Read().Settings.Shows
 	for _, sh := range s.Store.Read().Shows {
+		sent += s.grabFixes(ctx, sh, releases)
 		wanted := map[Target]bool{}
 		for _, e := range s.Wanted(sh) {
 			wanted[Target{Season: e.Season, Episode: e.Number}] = true
@@ -99,7 +100,7 @@ func (s *Service) MatchNewReleases(ctx context.Context, releases []model.Release
 				continue
 			}
 			t := Target{Season: info.Season, Episode: info.Episode}
-			if t.Episode == 0 && !s.packWanted(sh, t.Season) {
+			if t.Episode == 0 && !s.packWorthIt(sh, t.Season) {
 				continue
 			}
 			if t.Episode != 0 && !wanted[t] {
@@ -135,19 +136,4 @@ func (s *Service) MatchNewReleases(ctx context.Context, releases []model.Release
 		}
 	}
 	return sent
-}
-
-// packWanted reports whether a whole season should be downloaded as a pack:
-// every episode has aired, is followed, and none has a file or download.
-func (s *Service) packWanted(sh store.Show, season int) bool {
-	all := episodesIn(sh, season)
-	if len(all) < 2 || !s.seasonAired(all) || !noFiles(all) {
-		return false
-	}
-	for _, e := range all {
-		if !e.Monitored || downloading(sh, e) {
-			return false
-		}
-	}
-	return true
 }

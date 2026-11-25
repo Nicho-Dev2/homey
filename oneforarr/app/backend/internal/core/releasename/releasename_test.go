@@ -57,3 +57,25 @@ func TestNormalize(t *testing.T) {
 		}
 	}
 }
+
+func TestGroupAndFix(t *testing.T) {
+	for _, c := range []struct {
+		name   string
+		group  string
+		fix    int
+		repack bool
+	}{
+		{"Good Daughter 2026 S01E02 1080p AMZN WEB-DL DDP5 1 H 264-RAWR", "RAWR", 0, false},
+		{"good daughter 2026 s01e04 1080p web h264-insidious", "insidious", 0, false},
+		{"Good.Daughter.2026.S01E04.REPACK.1080p.WEB.h264-INSIDIOUS[eztv].mkv", "INSIDIOUS", 1, true},
+		{"Show.S01E04.REPACK2.1080p.WEB.h264-GRP", "GRP", 2, true},
+		{"Show.S01E04.PROPER.1080p.WEB.h264-OTHER", "OTHER", 1, false},
+		{"Movie 2020 1080p WEB-DL", "", 0, false},
+		{"Spider-Man 2002 1080p BluRay x264", "", 0, false},
+	} {
+		i := Parse(c.name)
+		if i.Group != c.group || i.Fix != c.fix || i.Repack != c.repack || i.Proper != (c.fix > 0) {
+			t.Errorf("%s: group %q fix %d repack %v", c.name, i.Group, i.Fix, i.Repack)
+		}
+	}
+}

@@ -322,7 +322,7 @@ func TestAddSearchImportSeasonPack(t *testing.T) {
 	}
 
 	// Removing the show and re-adding it finds the files already there.
-	_ = s.Remove(77, false)
+	_ = s.Remove(ctx, 77, false)
 	sh, _ = s.Add(ctx, 77, "1080p", MonitorAll)
 	for _, e := range sh.Episodes {
 		if e.File == nil {

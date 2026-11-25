@@ -113,6 +113,7 @@ type fakeQBit struct {
 	added   []string // tags
 	content string   // content_path for the finished torrent
 	done    bool
+	deleted []string // hashes
 }
 
 func (f *fakeQBit) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -139,6 +140,10 @@ func (f *fakeQBit) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				"progress": progress, "state": "stalledUP", "content_path": f.content, "tags": tag, "size": 2 * gb})
 		}
 		json.NewEncoder(w).Encode(list)
+	case "/api/v2/torrents/delete":
+		_ = r.ParseForm()
+		f.deleted = append(f.deleted, r.Form.Get("hashes"))
+		f.added = nil
 	default:
 		http.NotFound(w, r)
 	}
@@ -257,7 +262,7 @@ func TestAddSearchImport(t *testing.T) {
 	}
 
 	// Remove with files deletes only the movie's folder.
-	if err := s.Remove(10331, true); err != nil {
+	if err := s.Remove(ctx, 10331, true); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(filepath.Dir(want)); !os.IsNotExist(err) {
@@ -265,6 +270,24 @@ func TestAddSearchImport(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(dl, "movie.mkv")); err != nil {
 		t.Error("the download (still seeding) was deleted")
+	}
+	if len(qb.deleted) != 0 {
+		t.Errorf("a finished, imported torrent was removed from qBittorrent: %v", qb.deleted)
+	}
+
+	// Removing a movie that's downloading cancels the download first.
+	qb.done, qb.added = false, nil
+	if _, err := s.Add(ctx, 10331, "1080p"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.SearchAndGrab(ctx, 10331); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Remove(ctx, 10331, false); err != nil {
+		t.Fatal(err)
+	}
+	if len(qb.deleted) != 1 {
+		t.Errorf("download not cancelled: deleted %v", qb.deleted)
 	}
 }
 

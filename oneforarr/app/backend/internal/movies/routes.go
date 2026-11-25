@@ -138,6 +138,9 @@ func (s *Service) handleGet(w http.ResponseWriter, r *http.Request) {
 		webserver.Error(w, http.StatusNotFound, errNotFound.Error())
 		return
 	}
+	if m.ReleaseDate == "" {
+		m = s.fillReleaseDate(r.Context(), m)
+	}
 	// upgradable: in the library, below the quality wanted, upgrades on, and
 	// nothing downloading. The page shows "Look for Upgrade" only then.
 	upgradable := m.File != nil && s.Wanted(m)
@@ -176,7 +179,7 @@ func (s *Service) handleRemove(w http.ResponseWriter, r *http.Request) {
 		webserver.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	if err := s.Remove(id, body.DeleteFiles); err != nil {
+	if err := s.Remove(r.Context(), id, body.DeleteFiles); err != nil {
 		webserver.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}

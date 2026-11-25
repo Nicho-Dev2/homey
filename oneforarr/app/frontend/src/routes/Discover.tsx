@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { errorText } from "../components/Form";
 import { Poster } from "../components/MovieBits";
 import { api, type DiscoverItem, type DiscoverPage, type Preset, type SettingsView } from "../lib/api";
-import { formatAge } from "../lib/format";
+import { formatAge, formatDate } from "../lib/format";
 import { onLinkClick } from "../lib/router";
 
 // The last page shown, so coming back to Discover (or reloading the browser)
@@ -84,7 +84,7 @@ export function Discover() {
                     <Poster path={it.posterPath} title={it.title} width={342} />
                     {(it.inApp || added.has(key)) && <span className="badge badge-wanted">In app</span>}
                     <span className="poster-title">{it.title}</span>
-                    <span className="muted small">{it.kind === "show" ? "Show" : "Movie"}{it.year ? ` · ${it.year}` : ""}</span>
+                    <span className="muted small">{it.kind === "show" ? "Show" : "Movie"}{it.kind === "movie" && it.releaseDate ? ` · ${formatDate(it.releaseDate)}` : it.year ? ` · ${it.year}` : ""}</span>
                   </button>
                 </li>
               );
@@ -144,7 +144,7 @@ function Details({ item, added, onClose, onAdded }: { item: DiscoverItem; added:
       const body = item.kind === "show"
         ? { tmdbId: item.tmdbId, quality, monitor: follow, search: follow !== "none" }
         : { tmdbId: item.tmdbId, quality, search: true };
-      await api.post(path, body);
+      await api.post(`/api${path}`, body);
       setDone(true);
       onAdded();
     } catch (err) {
@@ -161,7 +161,8 @@ function Details({ item, added, onClose, onAdded }: { item: DiscoverItem; added:
         <div className="sheet-text">
           <h2>{item.title}</h2>
           <p className="muted small">
-            {item.kind === "show" ? "Show" : "Movie"}{item.year ? ` · ${item.year}` : ""}
+            {item.kind === "show" ? "Show" : "Movie"}
+            {item.kind === "movie" && item.releaseDate ? ` · Released ${formatDate(item.releaseDate)}` : item.year ? ` · ${item.year}` : ""}
             {item.votes > 0 ? ` · ★ ${item.rating.toFixed(1)}` : ""}
           </p>
           <p>{item.overview || "No description on TMDB."}</p>

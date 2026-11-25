@@ -220,8 +220,8 @@ func (s *Service) searchMissing(ctx context.Context, sh store.Show) string {
 }
 
 // searchList searches for the given episodes: a season pack first for any
-// season where every episode has aired and none has a file, then the rest
-// one by one, in parallel.
+// season where one is worth it (see packWorthIt), then the rest one by one,
+// in parallel.
 func (s *Service) searchList(ctx context.Context, sh store.Show, missing []store.Episode) string {
 	bySeason := map[int][]store.Episode{}
 	var seasons []int
@@ -236,8 +236,7 @@ func (s *Service) searchList(ctx context.Context, sh store.Show, missing []store
 	var singles []store.Episode
 	for _, season := range seasons {
 		eps := bySeason[season]
-		all := episodesIn(sh, season)
-		if len(eps) == len(all) && len(all) > 1 && s.seasonAired(all) && noFiles(all) {
+		if s.packWorthIt(sh, season) {
 			if sent, _ := s.tryTarget(ctx, sh, Target{Season: season}); sent {
 				packs++
 				continue
@@ -302,13 +301,17 @@ func (s *Service) Grab(ctx context.Context, id int, t Target, r model.Release) e
 		return err
 	}
 	log.Printf("shows: sent %s for %s from %s as a %s", r.Title, sh.Title, r.IndexerName, kind)
-	return s.update(id, func(x *store.Show) {
+	err = s.update(id, func(x *store.Show) {
 		x.Downloads = append(x.Downloads, store.ShowDownload{
 			Download: store.Download{Tag: tag, ReleaseTitle: r.Title, IndexerName: r.IndexerName, Link: kind, SentAt: s.Now(),
 				Hash: r.InfoHash, Size: r.Size, State: "sent"},
 			Season: t.Season, Episode: t.Episode,
 		})
 	})
+	if err == nil && t.Episode == 0 {
+		s.dropWeakSingles(ctx, id, t.Season)
+	}
+	return err
 }
 
 // Tag marks a show download in qBittorrent: oneforarr-show-<id>-s01 for a
@@ -330,13 +333,4 @@ func covered(sh store.Show, t Target) bool {
 		}
 	}
 	return false
-}
-
-func noFiles(eps []store.Episode) bool {
-	for _, e := range eps {
-		if e.File != nil {
-			return false
-		}
-	}
-	return true
 }

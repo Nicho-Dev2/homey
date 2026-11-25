@@ -18,6 +18,7 @@ import (
 
 	"github.com/Nicho-Dev2/homey/oneforarr/app/backend/internal/core/releasename"
 	"github.com/Nicho-Dev2/homey/oneforarr/app/backend/internal/core/store"
+	"github.com/Nicho-Dev2/homey/oneforarr/app/backend/internal/mediacheck"
 )
 
 // ---- Quality ----
@@ -225,6 +226,41 @@ func VideoFiles(path string) []VideoFile {
 	})
 	sort.Slice(out, func(i, j int) bool { return out[i].Size > out[j].Size })
 	return out
+}
+
+// FixesRelease says whether a new release is a fixed version of the
+// release a library file came from: a later PROPER or REPACK with the same
+// resolution and an at least as good source. A REPACK must be by the same
+// group (a group fixing its own release); a PROPER can be by any group.
+// Files whose release isn't known (found by a scan, or imported before the
+// app kept it) never match.
+func FixesRelease(newTitle, fileRelease string) bool {
+	if fileRelease == "" {
+		return false
+	}
+	nu, have := releasename.Parse(newTitle), releasename.Parse(fileRelease)
+	switch {
+	case nu.Fix <= have.Fix:
+		return false
+	case nu.Resolution != have.Resolution || nu.Source < have.Source:
+		return false
+	case nu.Season != have.Season || (have.Episode != 0 && nu.Episode != have.Episode):
+		return false
+	case nu.Repack:
+		return nu.Group != "" && strings.EqualFold(nu.Group, have.Group)
+	}
+	return true
+}
+
+// SyncProblem checks the video files of a finished download for sound
+// that drifts out of sync (see mediacheck). Files that can't be checked
+// pass.
+func SyncProblem(path string) (mediacheck.Problem, bool) {
+	var paths []string
+	for _, f := range VideoFiles(path) {
+		paths = append(paths, f.Path)
+	}
+	return mediacheck.FindProblem(paths)
 }
 
 // CleanFileName makes a title safe as a file or folder name.

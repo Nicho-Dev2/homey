@@ -28,6 +28,23 @@ export function formatAge(iso?: string): string {
   return `${Math.floor(d / 365)} y`;
 }
 
+// formatDate turns "2026-10-01" into "Oct 1, 2026" (read as a calendar
+// day, so no time zone can move it to the day before).
+export function formatDate(day?: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(day ?? "");
+  if (!m) return "";
+  const date = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+}
+
+// released says whether a "2026-10-01" day has come (true when unknown).
+export function released(day?: string): boolean {
+  if (!day) return true;
+  const now = new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  return day <= today;
+}
+
 const groups: Record<number, string> = {
   1000: "Console", 2000: "Movies", 3000: "Audio", 4000: "PC", 5000: "TV",
   6000: "XXX", 7000: "Books", 8000: "Other",

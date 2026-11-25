@@ -14,6 +14,12 @@ func Static(files fs.FS) http.Handler {
 	fileServer := http.FileServerFS(files)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		setSecurityHeaders(w)
+		// Pages are only ever fetched. Anything else sent here missed its
+		// /api/ address, and must fail loudly instead of getting a page.
+		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			Error(w, http.StatusNotFound, "No such address: "+r.Method+" "+r.URL.Path)
+			return
+		}
 		name := strings.TrimPrefix(path.Clean(r.URL.Path), "/")
 		if name == "" {
 			name = "index.html"

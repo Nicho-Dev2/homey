@@ -87,6 +87,11 @@ func (s *Service) checkOne(ctx context.Context, qb *downloads.QBittorrent, sh st
 	case t == nil:
 		// Not there yet.
 	case t.Done():
+		if p, bad := library.SyncProblem(set.Folders.ToApp(t.ContentPath)); bad {
+			d.Hash = t.Hash
+			s.reject(ctx, qb, sh, d, fmt.Sprintf("Deleted %s: it's out of sync (%s).", d.ReleaseTitle, p))
+			return
+		}
 		s.importDownload(sh, d, *t, set)
 	default:
 		dead := false
@@ -111,24 +116,33 @@ func (s *Service) checkOne(ctx context.Context, qb *downloads.QBittorrent, sh st
 	}
 }
 
-// giveUp removes a dead download (no seeders, no progress) from
-// qBittorrent, blocks its release and searches for the same episodes again.
+// giveUp gives up on a dead download (no seeders, no progress).
 func (s *Service) giveUp(ctx context.Context, qb *downloads.QBittorrent, sh store.Show, d store.ShowDownload, hours int) {
+	s.reject(ctx, qb, sh, d, fmt.Sprintf("Gave up on %s after %d hours without seeders.", d.ReleaseTitle, hours))
+}
+
+// reject removes a download from qBittorrent with its files, blocks its
+// release and searches again: for the same episodes, or for its whole
+// season when a season pack is now worth it. note says why.
+func (s *Service) reject(ctx context.Context, qb *downloads.QBittorrent, sh store.Show, d store.ShowDownload, note string) {
 	if err := qb.Delete(ctx, d.Hash); err != nil {
-		log.Printf("shows: removing dead download %s: %v", d.ReleaseTitle, err)
+		log.Printf("shows: removing %s: %v", d.ReleaseTitle, err)
 		return
 	}
-	note := fmt.Sprintf("Gave up on %s after %d hours without seeders.", d.ReleaseTitle, hours)
 	log.Printf("shows: %s (%s); searching again", note, sh.Title)
 	_ = s.update(sh.TMDBID, func(x *store.Show) {
 		x.Downloads = without(x.Downloads, d.Tag)
 		x.Blocked = append(x.Blocked, d.ReleaseTitle)
 		x.LastSearch = &store.SearchNote{At: s.Now(), Message: note}
 	})
+	target := targetOf(d)
+	if latest, ok := s.Get(sh.TMDBID); ok && d.Episode != 0 && s.packWorthIt(latest, d.Season) {
+		target = Target{Season: d.Season}
+	}
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 		defer cancel()
-		msg, err := s.SearchAndGrab(ctx, sh.TMDBID, targetOf(d))
+		msg, err := s.SearchAndGrab(ctx, sh.TMDBID, target)
 		if err != nil {
 			msg = err.Error()
 		}
@@ -156,8 +170,10 @@ type placed struct {
 func (s *Service) importDownload(sh store.Show, d store.ShowDownload, t downloads.Torrent, set store.Settings) {
 	files := library.VideoFiles(set.Folders.ToApp(t.ContentPath))
 	torrentInfo := releasename.Parse(t.Name)
+	preset := library.PresetByID(sh.Quality)
 	var done []placed
 	var problems []string
+	kept := 0 // episodes of a season pack that keep the file they have
 	for _, f := range files {
 		info := releasename.Parse(filepath.Base(f.Path))
 		season, number := info.Season, info.Episode
@@ -176,6 +192,14 @@ func (s *Service) importDownload(sh store.Show, d store.ShowDownload, t download
 			problems = append(problems, fmt.Sprintf("S%02dE%02d isn't in the episode list", season, number))
 			continue
 		}
+		// A season pack fills the gaps; it replaces a file only if it's an
+		// upgrade or a fix (REPACK, PROPER) of the file's release. (A
+		// single episode was grabbed because it was wanted, or as a fix.)
+		if d.Episode == 0 && library.UpgradeCheck(e.File, set.Shows.Upgrades, preset, torrentInfo) != "" &&
+			!(e.File != nil && library.FixesRelease(d.ReleaseTitle, e.File.Release)) {
+			kept++
+			continue
+		}
 		quality := torrentInfo.Quality()
 		if quality == "Unknown" {
 			quality = info.Quality()
@@ -189,10 +213,16 @@ func (s *Service) importDownload(sh store.Show, d store.ShowDownload, t download
 		if res == 0 {
 			res = info.Resolution
 		}
-		done = append(done, placed{season, number, store.MediaFile{Path: dst, Size: f.Size, Quality: quality, Resolution: res, ImportedAt: s.Now()}})
+		done = append(done, placed{season, number, store.MediaFile{Path: dst, Size: f.Size, Quality: quality, Resolution: res, ImportedAt: s.Now(), Release: d.ReleaseTitle}})
 	}
 
 	_ = s.update(sh.TMDBID, func(x *store.Show) {
+		if len(done) == 0 && kept > 0 {
+			x.Downloads = without(x.Downloads, d.Tag)
+			x.LastSearch = &store.SearchNote{At: s.Now(),
+				Message: "The " + targetOf(d).String() + " pack finished, but every episode in it was already in the library."}
+			return
+		}
 		if len(done) == 0 {
 			for i := range x.Downloads {
 				if x.Downloads[i].Tag == d.Tag {
@@ -223,11 +253,18 @@ func (s *Service) importDownload(sh store.Show, d store.ShowDownload, t download
 		}
 		x.Downloads = without(x.Downloads, d.Tag)
 		msg := "Imported " + plural(len(done), "episode") + " of " + targetOf(d).String() + "."
+		if kept > 0 {
+			msg += fmt.Sprintf(" Kept the files already there for %s.", plural(kept, "episode"))
+		}
 		if len(problems) > 0 {
 			msg += " Skipped: " + strings.Join(problems, "; ") + "."
 		}
 		x.LastSearch = &store.SearchNote{At: s.Now(), Message: msg}
 	})
+	if len(done) == 0 && kept > 0 {
+		log.Printf("shows: %s %s pack finished; every episode was already in the library", sh.Title, targetOf(d))
+		return
+	}
 	if len(done) == 0 {
 		log.Printf("shows: importing %s %s: nothing imported (%s)", sh.Title, targetOf(d), strings.Join(problems, "; "))
 		return

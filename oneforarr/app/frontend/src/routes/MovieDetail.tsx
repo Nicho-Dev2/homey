@@ -10,7 +10,7 @@ import { useCallback, useEffect, useState } from "react";
 import { errorText } from "../components/Form";
 import { Badge, CancelDownload, Poster, ProgressBar, StuckNote, formatETA, movieStatus } from "../components/MovieBits";
 import { api, type Message, type Movie, type Preset } from "../lib/api";
-import { formatAge, formatSize } from "../lib/format";
+import { formatAge, formatDate, formatSize, released } from "../lib/format";
 import { navigate, onLinkClick } from "../lib/router";
 
 type Note = { ok: boolean; text: string };
@@ -108,6 +108,9 @@ export function MovieDetail({ id }: { id: string }) {
         <div className="movie-poster"><Poster path={movie.posterPath} title={movie.title} width={342} /></div>
         <div className="movie-info">
           <h1>{movie.title} <span className="muted">{movie.year || ""}</span></h1>
+          {movie.releaseDate && (
+            <p className="release-date">{released(movie.releaseDate) ? "Released" : "Comes out"} {formatDate(movie.releaseDate)}</p>
+          )}
           <p className="muted small">
             {movie.runtime ? `${movie.runtime} min · ` : ""}
             <a href={`https://www.themoviedb.org/movie/${movie.tmdbId}`} target="_blank" rel="noreferrer">TMDB</a>

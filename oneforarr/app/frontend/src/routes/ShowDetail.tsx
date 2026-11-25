@@ -229,7 +229,7 @@ export function ShowDetail({ id }: { id: string }) {
               <input type="checkbox" checked={deleteFiles} onChange={(e) => setDeleteFiles(e.target.checked)} />
               Also delete <code>{folder}</code> from the TV folder
             </label>
-            <p className="muted small">Downloads in qBittorrent are left alone, so they can keep seeding.</p>
+            <p className="muted small">Its downloads still in progress are cancelled and deleted from qBittorrent. Finished ones are left there, so they can keep seeding.</p>
             <div className="button-row">
               <button type="button" className="button" onClick={() => setConfirmRemove(false)}>Keep it</button>
               <button type="button" className="button danger" onClick={remove} disabled={busy === "remove"}>Remove</button>

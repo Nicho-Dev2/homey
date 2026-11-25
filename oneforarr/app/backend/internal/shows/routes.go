@@ -198,7 +198,7 @@ func (s *Service) handleRemove(w http.ResponseWriter, r *http.Request) {
 		webserver.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	if err := s.Remove(id, body.DeleteFiles); err != nil {
+	if err := s.Remove(r.Context(), id, body.DeleteFiles); err != nil {
 		webserver.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}

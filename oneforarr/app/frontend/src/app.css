@@ -291,6 +291,7 @@ select {
 .movie-poster { width: 110px; flex: none; }
 .movie-info { min-width: 0; display: grid; gap: 8px; justify-items: start; }
 .movie-info h1 { font-size: 1.4rem; }
+.release-date { font-weight: 600; }
 .overview { margin: 0; line-height: 1.5; }
 .path { overflow-wrap: anywhere; }
 .button-row { display: flex; flex-wrap: wrap; gap: 8px; }
